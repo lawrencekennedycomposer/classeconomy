@@ -14,7 +14,7 @@
 
 (() => {
    // Static assets (served from: mvp-offline/assets/...)
-   const PRINT_CARDS_URL = '/assets/bingo/bingo_maths_gate_cards.pdf';
+   const PRINT_CARDS_URL = 'assets/bingo/bingo_maths_gate_cards.pdf';
 
   const MOD = {
     active: false,
