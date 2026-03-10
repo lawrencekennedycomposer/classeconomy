@@ -1,0 +1,96 @@
+/* =========================================================
+   VERSION INTEGRITY BLOCK – VI-PC076-A1
+   Module: baseLayer.config.pc076.js
+   Purpose: Phase Base Layer Controller (Scaffold)
+   Status: INFRASTRUCTURE ONLY — No mounting logic yet
+   Notes:
+   - Pure controller scaffold
+   - DOM host is safely bound in init()
+   - No components are mounted yet
+   - Invoked by PC067
+   ========================================================= */
+
+const BaseLayerController = (() => {
+
+  let currentPhase = null;
+  let currentBase = null; // will later hold active base layer instance
+  let baseHost = null;    // DOM host (#phase-base-host) — bound during init()
+
+  // --- Phase Base Layer Mapping Table ---
+  // NOTE: This remains EMPTY at this stage (scope requirement).
+  // Future example: BASE_BY_PHASE = { 1: 'seating' };
+  const BASE_BY_PHASE = Object.freeze({});
+
+  function init() {
+    // Bind DOM host (inert at this stage)
+    baseHost = document.getElementById('phase-base-host');
+    if (!baseHost) {
+      log('WARN: #phase-base-host not found at init()');
+    }
+
+    log('init()');
+  }
+
+  // --- Base Layer Lifecycle ---
+  // onPhaseChange(toPhase):
+  // 1. Destroy previous base layer instance (if any)
+  // 2. Look up base layer for the new phase via BASE_BY_PHASE
+  // 3. If defined, request mount (deferred)
+  // 4. If undefined, leave base layer host empty
+  function onPhaseChange(toPhase) {
+    if (!toPhase) return;
+    if (toPhase === currentPhase) return;
+
+    log(`phase change received: ${currentPhase} → ${toPhase}`);
+    currentPhase = toPhase;
+
+    if (currentBase) {
+      unmountBase();
+    }
+
+    const baseKey = getBaseKeyForPhase(toPhase);
+
+    if (!baseKey) {
+      log(`no base layer defined for phase ${toPhase}`);
+      return;
+    }
+
+    mountBase(baseKey); // still inert
+  }
+
+  function getBaseKeyForPhase(phase) {
+    return BASE_BY_PHASE[phase] ?? null;
+  }
+
+  // --- Base Layer Mount Contract (Scaffold Only) ---
+  function mountBase(key) {
+    log(`mountBase('${key}') called (placeholder)`);
+    // future: resolve component + mountInto(phase-base-host)
+  }
+
+  function unmountBase() {
+    log(`unmountBase() called (placeholder)`);
+    currentBase = null;
+    // future: cleanup active base layer instance
+  }
+
+  // Safe accessor for the DOM host (for future mounting)
+  function getHost() {
+    return baseHost;
+  }
+
+  function log(msg) {
+    console.log(`[PC076][BaseLayer] ${msg}`);
+  }
+
+  return {
+    init,
+    onPhaseChange,
+    mountBase,
+    unmountBase,
+    getHost
+  };
+
+})();
+
+export default BaseLayerController;

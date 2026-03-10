@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Classroom Gameflow OS – MVP Dashboard</title>
+
+  <!-- Single stylesheet (unchanged) -->
+  <link rel="stylesheet" href="./styles/style.css?v=20251113-1" />
+
+  <!-- Required for offline deployments -->
+  <link rel="icon" href="data:,">
+
+  <!-- VERSION INTEGRITY -->
+  <meta name="version" content="Operational Routine v1.8" />
+  <meta name="version-integrity" content="VI-DASH-4; VI-A1" />
+</head>
+
+<body>
+
+  <!-- ======================================================
+       CANON DASHBOARD ROOT (Matches OR v1.8 A–C)
+       ====================================================== -->
+  <div id="dashboard-root">
+
+    <!-- ---------------------
+         LEADERBOARD COLUMN
+         (Left or Right per toggle)
+         --------------------- -->
+    <aside id="leaderboard"></aside>
+
+    <!-- ---------------------
+         TOPBAR (Simple Layout)
+         --------------------- -->
+    <header id="topbar">
+      <div class="topbar-left">
+        <div id="title-strip">Class Economy</div>
+      </div>
+
+      <div class="topbar-center"></div>
+
+      <div class="topbar-right">
+        <select id="class-select" class="topbar-select" title="Class"></select>
+        <button id="undo-btn" class="topbar-btn">⟲</button>
+        <button id="redo-btn" class="topbar-btn">⟳</button>
+        <button id="history-btn" class="topbar-btn">History</button>
+      </div>
+    </header>
+
+    <!-- ---------------------
+         ACTIVITY CANVAS
+         (Hosts all windows + OS modules)
+         --------------------- -->
+    <main id="activity-canvas">
+
+      <!-- PHASE WINDOWS / LARGE WINDOWS -->
+      <div id="window-host"></div>
+
+      <!-- POPUPS / SMALL WINDOWS -->
+      <div id="popup-host"></div>
+
+      <!-- STW HOST (Wheel + STW2) -->
+      <div id="stw-host"></div>
+
+    </main>
+
+    <!-- ---------------------
+         BURN-LINE (Fixed Bottom)
+         --------------------- -->
+    <footer id="burnline"></footer>
+
+    <!-- ---------------------
+         TEACHER CONTROL BUTTON STRIP
+         (Top-right overlay)
+         --------------------- -->
+    <div id="controls-topright"></div>
+
+  </div>
+
+  <!-- ======================================================
+       CANON SCRIPT LOADING ORDER
+       Ensures stable event-bus and correct initialisation.
+       ====================================================== -->
+  <script type="module">
+    /* PC#100 – Preboot Login Wall
+       This MUST be the only static import, otherwise the OS boots
+       before login can block it. */
+    import './scripts/boot.pc101.js';
+  </script>
+
+</body>
+</html>

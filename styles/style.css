@@ -1,0 +1,506 @@
+/* =========================================================
+   CLASSROOM GAMEFLOW OS – STAGE B/C CSS CORE
+   Operational Routine v1.8 – Canon Layout
+   FULL REPLACEMENT — CLEAN FOUNDATION
+   ========================================================= */
+
+:root {
+  --bg: #0b0c10;
+  --panel: #11151a;
+  --line: #1f2630;
+  --txt: #e8eef2;
+  --accent: #4ea1ff;
+
+  --leaderboard-w: 280px;
+  --topbar-h: 64px;
+  --burnline-h: 72px;
+
+  --z-leaderboard: 10;
+  --z-topbar: 20;
+  --z-controls: 30;
+  --z-windows: 40;
+  --z-popups: 50;
+  --z-stw: 60;
+}
+
+/* RESET */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, Arial;
+  background: var(--bg);
+  color: var(--txt);
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* =========================================================
+   ROOT GRID — THE STRUCTURAL BACKBONE
+   ========================================================= */
+
+#dashboard-root {
+  display: grid;
+  grid-template-columns: var(--leaderboard-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr var(--burnline-h);
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg);
+}
+
+/* =========================================================
+   LEADERBOARD COLUMN
+   ========================================================= */
+
+#leaderboard {
+  grid-row: 2;
+  grid-column: 1;
+  background: var(--panel);
+  border-right: 2px solid var(--line);
+  padding: 0;               /* padding handled inside .lb */
+  overflow: hidden;         /* never bleeds into burnline, never scrolls */
+  z-index: var(--z-leaderboard);
+}
+
+
+/* Dock to right when toggled */
+body.leaderboard-right #dashboard-root {
+  grid-template-columns: 1fr var(--leaderboard-w);
+}
+
+body.leaderboard-right #leaderboard {
+  grid-column: 2;
+  border-right: none;
+  border-left: 2px solid var(--line);
+}
+
+/* =========================================================
+   TOPBAR — SMALL STRIP
+   ========================================================= */
+
+#topbar {
+  grid-column: 1 / span 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: #101318;
+  border-bottom: 1px solid var(--line);
+  z-index: var(--z-topbar);
+}
+
+#title-strip {
+  margin-left: auto;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.topbar-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--txt);
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* =========================================================
+   ACTIVITY CANVAS
+   ========================================================= */
+
+#activity-canvas {
+  grid-column: 2;
+  grid-row: 2;
+  background: var(--bg);
+  position: relative; /* Important: hosts windows */
+  overflow: hidden;
+}
+
+/* Phase base layer must fill the activity canvas */
+#phase-base-host {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 0 !important;
+}
+
+
+/* =========================================================
+   PHASE BASE HOST — FULL CANVAS UNDERLAY
+   ========================================================= */
+
+#phase-base-host {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none; /* individual base layers opt-in to clicks */
+}
+
+/* =========================================================
+   WINDOW HOST — LARGE WINDOWS
+   ========================================================= */
+
+#window-host {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  z-index: var(--z-windows);
+  pointer-events: none; /* windows take clicks, host does not */
+}
+
+/* =========================================================
+   POPUP HOST — SMALL WINDOWS
+   ========================================================= */
+
+#popup-host {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  z-index: var(--z-popups);
+  pointer-events: none;
+}
+
+/* =========================================================
+   STW HOST — WHEEL + STW2
+   ========================================================= */
+
+#stw-host {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-stw);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* =========================================================
+   phase base host - activity canvas
+   ========================================================= */
+
+#phase-base-host {
+  position: absolute;
+  inset: 0;
+  z-index: 5;          /* below windows (40), popups (50), stw (60) */
+  pointer-events: none;
+}
+
+/* =========================================================
+   TEACHER CONTROLS — TOP RIGHT
+   ========================================================= */
+
+#controls-topright {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: var(--z-controls);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+/* =========================================================
+   BURNLINE — FIXED BOTTOM
+   ========================================================= */
+
+#burnline {
+  grid-column: 1 / span 2;
+  grid-row: 3;
+  background: var(--panel);
+  border-top: 2px solid var(--line);
+  z-index: var(--z-topbar);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+}
+
+/* =========================================================
+   CANVAS WINDOWS (Shared style for all modals/popups)
+   ========================================================= */
+
+.canvas-window {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  pointer-events: auto;
+  padding: 16px;
+  width: min(600px, 80%);
+  margin: auto;
+  animation: fadeIn .15s ease-out;
+}
+
+.canvas-header {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.canvas-body {
+  padding: 8px 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity:1; transform: translateY(0); }
+}
+/* =========================================================
+   PATCH v1.8.P1 – TOPBAR SIZE + SPACING REFINEMENT
+   ========================================================= */
+
+/* Shrink topbar height */
+:root {
+  --topbar-h: 44px; /* was 64px */
+}
+
+/* Reduce padding & button sizing */
+#topbar {
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.topbar-btn {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+/* Add clean separation from the canvas */
+#topbar {
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Tighten title */
+#title-strip {
+  margin-left: auto;
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+/* =========================================================
+   PATCH v1.8.P2 – SWAP TOPBAR ALIGNMENT
+   ========================================================= */
+
+/* Put the title on the left, buttons on the right */
+#topbar {
+  justify-content: space-between;
+}
+
+/* Wrap buttons in a right-aligned container */
+#topbar button,
+#history-btn {
+  order: 2; /* send buttons to the right */
+}
+
+#title-strip {
+  order: 1; /* send title to the left */
+  margin-left: 0;
+}
+
+/* =========================================================
+   PC#050 – Teacher Menu – Visuals
+========================================================= */
+
+.teacher-menu-window {
+  max-width: 480px;
+  transform: translateX(80px);
+}
+
+.tm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-row-boost {
+  align-items: center;
+}
+
+.tm-btn {
+  padding: 8px 12px;
+  background: var(--panel, #11151a);
+  border: 1px solid var(--line, #262e3a);
+  color: var(--txt, #e8eef2);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tm-btn-primary {
+  background: var(--accent, #f5d76e);
+  border-color: var(--accent, #f5d76e);
+  color: #0b0c10;
+  font-weight: 600;
+}
+
+.tm-btn:hover {
+  opacity: 0.92;
+}
+
+.tm-note {
+  font-size: 11px;
+  opacity: 0.7;
+}
+/* =========================================================
+   PC#066 – Burnline Visual Engine Styles (Additive Only)
+   Mode 1 + Mode 2 + Morph + Rounded Thick Bar + Separators
+   Burnline region total height = 72px
+========================================================= */
+
+#burnline {
+  height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden; /* prevents thick bar overflow */
+}
+
+/* Container for segments + bar */
+.pc066-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 6px;      /* ensures safe spacing inside 72px */
+  box-sizing: border-box;
+}
+
+/* Row of segment colours */
+.pc066-segment-row {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  height: 32px;          /* top row: segments only */
+  margin-bottom: 4px;    /* small gap before progress row */
+}
+
+
+
+/* Remove separator from last segment */
+.pc066-seg:last-child {
+  border-right: none;
+}
+
+/* Active phase highlight */
+.pc066-seg.pc066-active {
+  outline: 3px solid rgba(255,255,255,0.85);
+  outline-offset: -3px;
+  box-shadow: 0 0 8px rgba(255,255,255,0.75);
+}
+
+/* Progress bar container row */
+.pc066-progress-row {
+  height: 30px;          /* bottom row */
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;   /* keeps rounded bar from clipping */
+  background: rgba(0,0,0,0.15); /* neutral background */
+}
+
+/* Rounded thick progress bar */
+.pc066-progress-bar {
+  height: 20px;                  /* THICK bar inside 30px region */
+  margin-top: 5px;               /* centers vertically */
+  width: 0%;                     /* grows with tick events */
+  background: white;             /* universal high-contrast colour */
+  border-radius: 12px;           /* fully rounded ends */
+  transition: width 0.25s linear;
+  box-shadow: 0 0 10px rgba(255,255,255,0.6); /* glow visible on IWBs */
+}
+
+.pc066-seg.pc066-mode2 {
+  transition: width 0.6s ease;
+}
+.pc066-progress-bar {
+  transition: opacity 0.6s ease;
+}
+
+/* =========================================================
+   PC066 – PATCH P1
+   Force burnline visuals to occupy full width
+   ========================================================= */
+
+/* Container must fill the entire burnline width */
+#burnline .pc066-container {
+  width: 100%;
+  flex: 1 0 auto;
+}
+
+/* Segment row must stretch horizontally */
+#burnline .pc066-segment-row {
+  width: 100%;
+  flex: 1 0 auto;
+}
+
+/* Progress row must also stretch horizontally */
+#burnline .pc066-progress-row {
+  width: 100%;
+}
+
+
+
+/* Subtle inner glow for the active burnline segment */
+.pc066-seg-active {
+  box-shadow: inset 0 0 8px rgba(255,255,255,0.45);
+}
+
+/* Burnline segment — merged final version with full transitions */
+.pc066-seg {
+  height: 100%;
+  border-right: 1px solid rgba(255,255,255,0.9);
+  box-sizing: border-box;
+  position: relative;
+
+  /* Smooth transitions for movement + fade + glow */
+  transition:
+    width 0.6s ease,
+    opacity 0.7s ease-in-out,
+    filter 0.7s ease-in-out,
+    box-shadow 0.35s ease-in-out;
+}
+
+/* Active glow (soft inner highlight) */
+.pc066-seg-active {
+  box-shadow: inset 0 0 8px rgba(255,255,255,0.45);
+}
+
+/* =========================================================
+   PC#040 – Force class select to match topbar
+========================================================= */
+#topbar #class-select.topbar-select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-image: none !important;
+
+  background: #2f2f2f !important;      /* grey */
+  color: #e6e6e6 !important;
+  border: 1px solid #4a4a4a !important;
+
+  font-size: 0.98rem !important;
+  font-weight: 700 !important;
+  padding: 7px 12px !important;
+  border-radius: 6px !important;
+  line-height: 1.1 !important;
+
+  cursor: pointer !important;
+  min-width: 140px !important;
+}
+
+#topbar #class-select.topbar-select:hover {
+  background: #3a3a3a !important;
+}
+
+#topbar #class-select.topbar-select:focus {
+  outline: none !important;
+  border-color: #6a6a6a !important;
+}
