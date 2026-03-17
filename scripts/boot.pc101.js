@@ -6,7 +6,7 @@
      - After auth: import canon OS chain in the SAME order as main.html used to
 ========================================================= */
 
-import { hasUserId, findAccount, listAccountsSafe } from './accounts.local.pc100.js';
+import { hasUserId, findAccount } from './accounts.local.pc100.js';
 
 const SESSION_KEY = 'ce:session:v1';
 
@@ -41,8 +41,6 @@ function mountWall() {
     .pc100-btn{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.10);color:#fff;cursor:pointer;font-weight:600}
     .pc100-btn.primary{background:rgba(0,170,255,.22);border-color:rgba(0,170,255,.35)}
     .pc100-error{margin-top:10px;font-size:12px;color:#ffb4b4;display:none}
-    .pc100-users{margin-top:8px;font-size:11px;opacity:.85;line-height:1.6}
-    .pc100-users code{margin-right:6px}
   `;
   document.head.appendChild(style);
 
@@ -69,15 +67,10 @@ function mountWall() {
           <button class="pc100-btn" type="button" id="pc100-clear">Clear session</button>
         </div>
         <div class="pc100-error" id="pc100-error">Invalid username/password</div>
-        <div class="pc100-users" id="pc100-users"></div>
       </form>
     </div>
   `;
   document.body.appendChild(wall);
-
-  const usersEl = wall.querySelector('#pc100-users');
-  const users = listAccountsSafe();
-  usersEl.innerHTML = `Users: ${users.map(u => `<code>${u.username}</code>`).join('')} &nbsp; | &nbsp; Password: <code>test123</code>`;
 
   return wall;
 }

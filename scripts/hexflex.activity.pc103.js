@@ -1,5 +1,5 @@
 /* =========================================================
-   PC#102 – Phase 5 Activity: Quad Connect (hub-controlled)
+   PC#103 – Phase 5 Activity: Hex Flex (hub-controlled)
    Purpose:
      - Collaborative Phase 5 mini-game
      - Owns ONLY the activity canvas while active
@@ -29,7 +29,8 @@
     currentTeamKey: '',
     currentStudent: null,
     turnState: 'idle', // idle | awaitingQuestion | awaitingPlacement | resolved
-    statusText: 'Select or advance to the next turn.',
+    placementsRemaining: 0,
+    statusText: 'Select student to begin.',
     board: new Map(), // cell -> teamKey
     riskBoostByTeam: new Map(),
 
@@ -320,29 +321,30 @@
         flex:1 1 auto;
         min-height:0;
         display:grid;
-        grid-template-columns: 40px repeat(8, minmax(0, 1fr));
-        grid-template-rows: 32px repeat(8, minmax(0, 1fr));
-        gap:8px;
+        grid-template-columns: 26px repeat(16, minmax(0, 1fr));
+        grid-template-rows: 20px repeat(16, minmax(0, 1fr));
+        gap:2px;
         background:#f3f4f6;
         border-radius:14px;
-        padding:6px;
+        padding:4px;
       }
       .ce-qc-axis,
       .ce-qc-cell{
         display:flex;
         align-items:center;
         justify-content:center;
-        border-radius:12px;
+        border-radius:8px;
         font-weight:900;
       }
       .ce-qc-axis{
         background:#e5e7eb;
         border:1px solid #d1d5db;
         color:#111827;
-        font-weight:900;
+        font-weight:800;
+        font-size:10px;
       }
       .ce-qc-cell{
-        min-height:56px;
+        min-height:20px;
         background:#e5e7eb;
         border:1px solid #d1d5db;
         position:relative;
@@ -580,8 +582,8 @@
       MOD.rawLinesByTeam.set(team.key, 0);
     }
 
-    const cols = ['A','B','C','D','E','F','G','H'];
-    const maxY = 8;
+    const cols = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
+    const maxY = 16;
     const dirs = [
       [1, 0],   // horizontal
       [0, 1],   // vertical
@@ -612,7 +614,7 @@
             ny += dy;
           }
 
-          if (len >= 4) {
+          if (len >= 6) {
             const boosted = !!MOD.riskBoostByTeam.get(teamKey);
             const value = boosted ? 2 : 1;
  
@@ -638,9 +640,17 @@
     if (MOD.board.has(cell)) return;
 
     MOD.board.set(cell, MOD.currentTeamKey);
-    MOD.turnState = 'resolved';
+    MOD.placementsRemaining = Math.max(0, Number(MOD.placementsRemaining || 0) - 1);
     recomputeTallies();
-    setStatus(`Placed ${MOD.currentTeamKey} at ${cell}. Click Next Turn when ready.`);
+
+    if (MOD.placementsRemaining > 0) {
+      MOD.turnState = 'awaitingPlacement';
+      setStatus(`Placed ${MOD.currentTeamKey} at ${cell}. Place 1 more dot.`);
+    } else {
+      MOD.turnState = 'resolved';
+      setStatus(`Placed ${MOD.currentTeamKey} at ${cell}. Turn complete. Click Select Student when ready.`);
+    }
+
     render();
   }
 
@@ -693,7 +703,7 @@
     const modal = document.createElement('div');
     modal.className = 'qc-modal';
     modal.innerHTML = `
-      <div class="qc-modal-card" role="dialog" aria-modal="true" aria-label="Quad Connect Question">
+      <div class="qc-modal-card" role="dialog" aria-modal="true" aria-label="Hex Flex Question">
         <div class="qc-modal-h">
           <div class="qc-modal-title">${escapeHtml(student.name)}</div>
           <button class="qc-x" data-qc-close aria-label="Close">×</button>
@@ -804,14 +814,16 @@
         if (!MOD.qStarted) return;
         closeQuestionModal();
         MOD.turnState = 'awaitingPlacement';
-        setStatus(`Correct. ${MOD.currentStudent?.name || 'Student'} may now call a coordinate.`);
+        MOD.placementsRemaining = 2;
+        setStatus(`Correct. ${MOD.currentStudent?.name || 'Student'} may now call 2 coordinates.`);
         syncUi();
         return;
       }
       if (t.matches('[data-qc-incorrect]')) {
         closeQuestionModal();
         MOD.turnState = 'resolved';
-        setStatus(`Incorrect. No placement for ${MOD.currentStudent?.name || 'this turn'}. Click Next Turn when ready.`);
+        MOD.placementsRemaining = 0;
+        setStatus(`Incorrect. No placement for ${MOD.currentStudent?.name || 'this turn'}. Click Select Student when ready.`);
         syncUi();
         return;
       }
@@ -859,6 +871,7 @@
     MOD.currentStudent = picked;
     MOD.currentTeamIndex = (MOD.currentTeamIndex + 1) % MOD.teamOrder.length;
     MOD.turnState = 'awaitingQuestion';
+    MOD.placementsRemaining = 0;
     setStatus(`Opening question for ${picked.name}...`);
 
     highlightCurrentStudent();
@@ -891,8 +904,8 @@
 
 
   function buildBoardHtml() {
-    const cols = ['A','B','C','D','E','F','G','H'];
-    const rows = ['1','2','3','4','5','6','7','8'];
+    const cols = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P'];
+    const rows = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16'];
     let html = `<div class="ce-qc-board"><div></div>`;
 
     cols.forEach(c => {
@@ -1023,7 +1036,7 @@
     MOD.root.innerHTML = `
       <div class="ce-qc-root">
         <div class="ce-qc-card">
-          <div class="ce-qc-title">Quad Connect</div>
+          <div class="ce-qc-title">Hex Flex</div>
           <div class="ce-qc-headerrow" data-qc-headerrow>
             ${buildTeamBarHtml()}
             ${buildControlsHtml()}
@@ -1073,7 +1086,7 @@
       // freeze gameplay
       MOD.turnState = 'resolved';
 
-      // show Quad Connect results
+      // show Hex Flex results
       renderResultsModal();
     });
   }
@@ -1111,7 +1124,7 @@
 
     modal.innerHTML = `
       <div class="qc-modal-card">
-        <div class="qc-modal-title">Quad Connect Results</div>
+        <div class="qc-modal-title">Hex Flex Results</div>
         ${rows}
         <div class="qc-footer">
           <button class="ce-qc-btn" data-qc-award>🏆 Award Students</button>
@@ -1156,7 +1169,8 @@
     MOD.currentTeamKey = '';
     MOD.currentStudent = null;
     MOD.turnState = 'idle';
-    MOD.statusText = 'Select or advance to the next turn.';
+    MOD.placementsRemaining = 0;
+    MOD.statusText = 'Select student to begin.';
     MOD.board = new Map();
     MOD.riskBoostByTeam = new Map();
     MOD.qbBuiltIn = null;
@@ -1191,7 +1205,7 @@
 
 
     MOD.root = document.createElement('div');
-    MOD.root.id = 'ce-quadconnect-root';
+    MOD.root.id = 'ce-hexflex-root';
 
     if (MOD.host && getComputedStyle(MOD.host).position === 'static') {
       MOD.host.style.position = 'relative';
@@ -1215,8 +1229,8 @@
   function registerWithHub() {
     const hub = window.__CE_PHASE5;
     if (!hub || typeof hub.register !== 'function') return false;
-    hub.register({ id: 'quadconnect', label: 'Quad Connect', mount: mountInto, unmount });
-    window.__CE_QUADCONNECT = Object.assign({}, window.__CE_QUADCONNECT, { mountInto, unmount });
+    hub.register({ id: 'hexflex', label: 'Hex Flex', mount: mountInto, unmount });
+    window.__CE_HEXFLEX = Object.assign({}, window.__CE_HEXFLEX, { mountInto, unmount });
     return true;
   }
 

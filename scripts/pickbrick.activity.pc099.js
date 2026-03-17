@@ -663,7 +663,13 @@
     MOD.turnState = 'awaitingQuestion';
     setStudentName(s.name);
     popStudentName();
-    setStatus('Selected. Open question.');
+    setStatus('Opening question...');
+
+    setTimeout(() => {
+      if (MOD.current && MOD.turnState === 'awaitingQuestion') {
+        openQuestionModal(MOD.current);
+      }
+    }, 1000);
     MOD.selectNeedsRearm = true;
     setSelectButtonDisengaged(true);
     syncUI();
@@ -737,9 +743,6 @@
               <button class="ce-btn primary ce-grow pb-big" data-pb-select>Select student</button>
              </div>
 
-            <div class="ce-row">
-             <button class="ce-btn ce-grow pb-big" data-pb-question>Open question</button>
-            </div>
 
             <div class="ce-card" style="padding:10px;">
               <div class="ce-title" style="margin-bottom:8px;">Question bank</div>
@@ -787,7 +790,6 @@
     MOD.elSub = qs('[data-pb-sub]', MOD.root);
 
     MOD.elBtnSelect = qs('[data-pb-select]', MOD.root);
-    MOD.elBtnQuestion = qs('[data-pb-question]', MOD.root);
     MOD.elBtnResetSelector = qs('[data-pb-resetSel]', MOD.root);
     MOD.elBtnResetBricks = qs('[data-pb-resetBricks]', MOD.root);
     MOD.elBtnOffer10 = qs('[data-pb-offer10]', MOD.root);
@@ -809,10 +811,6 @@
     MOD.elBtnResetSelector.addEventListener('click', () => resetSelector());
     MOD.elBtnResetBricks.addEventListener('click', () => resetBricks());
 
-    MOD.elBtnQuestion.addEventListener('click', () => {
-      if (!MOD.current) return;
-      openQuestionModal(MOD.current);
-    });
 
     MOD.elBtnOffer10.addEventListener('click', () => {
       offerTenBrick();
@@ -1115,7 +1113,8 @@
             <button class="pb-diffBtn" data-pb-summon="1">1</button>
             <button class="pb-diffBtn" data-pb-summon="2">2</button>
             <button class="pb-diffBtn" data-pb-summon="3">3</button>
-            <span class="pb-mono" style="opacity:0.7; font-weight:900;">Hotkeys: 1 / 2 / 3 • Reveal: 4</span>
+            <button class="pb-diffBtn" data-pb-reveal="1">Reveal</button>
+            <span class="pb-mono" style="opacity:0.7; font-weight:900;"> • Hotkeys: 1 / 2 / 3 • Reveal: 4</span>
           </div>
         </div>
 
@@ -1214,6 +1213,16 @@
         summon(t.getAttribute('data-pb-summon'));
         return;
       }
+
+
+      if (t.matches('[data-pb-reveal]')) {
+        if (!MOD.qStarted) return;
+        aWrap.classList.remove('pb-hidden');
+        aWrap.style.display = '';
+        stopModalTimers();
+        return;
+      }
+
 
       if (t.matches('[data-pb-correct]')) {
         if (!MOD.qStarted) return;

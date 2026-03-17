@@ -35,7 +35,7 @@
 
   // Preferred button order (left-to-right) in the Phase 5 topbar.
   // Activities not listed here will appear after these, in registry insertion order.
-  const PREFERRED_ORDER = ['bingo', 'pickbrick', 'quadconnect'];
+  const PREFERRED_ORDER = ['bingo', 'pickbrick', 'quadconnect', 'hexflex'];
 
 
   // -----------------------

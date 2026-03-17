@@ -156,6 +156,7 @@ try {
   import('./bingo.activity.pc097.js').catch(() => {});
   import('./pickbrick.activity.pc099.js').catch(() => {});
   import('./quadconnect.activity.pc102.js').catch(() => {});
+  import('./hexflex.activity.pc103.js').catch(() => {});
 
   // Future Phase 5 activities go here:
   // import('./phase5.someActivity.pc0xx.js').catch(() => {});
