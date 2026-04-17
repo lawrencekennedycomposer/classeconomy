@@ -8,8 +8,7 @@
 
 import * as Events from './events.js';
 import { EVENTS } from './events.js';
-import * as QB from './stw.questionbank.pc091.js';
-import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
+// Legacy QB removed — PC121 is authoritative
 
 (() => {
   const Bus  = window.__CE_BOOT?.CE?.modules?.Events || Events;
@@ -22,11 +21,13 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
   let _picked = new Set();         // session-only
   let _category = '';
   let _subcategory = '';
+  let _focus = '';
   let _difficulty = 1;
 
   // QB source (built-in or uploaded)
-  let _qbBuiltIn = STW_QB_BUILTIN;
+  let _qbBuiltIn = window.STW_QB || {};
   let _qbUploaded = null;
+  let _qbLoadedSingle = null;
   let _qbActive = _qbBuiltIn;
   let _qbSource = 'builtin'; // builtin | uploaded
 
@@ -51,13 +52,78 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
   function _qsm(sel) { return _modalEl?.querySelector(sel) || null; }
   function _qse(sel) { return _endModalEl?.querySelector(sel) || null; }
 
+  const QB_STORAGE_KEY = 'ce.qb.lastSelection';
+
+  function _saveQBSelection() {
+    if (_qbSource !== 'builtin') return;
+    try {
+      localStorage.setItem(QB_STORAGE_KEY, JSON.stringify({
+        cat: _category,
+        sub: _subcategory,
+        focus: _focus
+      }));
+    } catch {}
+  }
+
+  function _loadQBSelection() {
+    try {
+      const raw = localStorage.getItem(QB_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data?.cat) _category = String(data.cat);
+      if (data?.sub) _subcategory = String(data.sub);
+      if (data?.focus) _focus = String(data.focus);
+    } catch {}
+  }
+
+
   function _normalizeUploadedQB(raw) {
     const obj = raw && typeof raw === 'object' ? raw : null;
     if (!obj) return null;
-    const qb = obj.STW_QB && typeof obj.STW_QB === 'object' ? obj.STW_QB : obj;
-    if (!qb || typeof qb !== 'object') return null;
-    if (!Object.keys(qb).length) return null;
-    return qb;
+
+    // unwrap common wrapper shapes from evaluated module/default exports
+    if (obj.default && typeof obj.default === 'object') {
+      return _normalizeUploadedQB(obj.default);
+    }
+    if (obj.__QB_DEFAULT__ && typeof obj.__QB_DEFAULT__ === 'object') {
+      return _normalizeUploadedQB(obj.__QB_DEFAULT__);
+    }
+
+    const ensureD = (d) => ({
+      1: Array.isArray(d?.[1]) ? d[1] : [],
+      2: Array.isArray(d?.[2]) ? d[2] : [],
+      3: Array.isArray(d?.[3]) ? d[3] : []
+    });
+
+    // Full exported tree: { STW_QB: {...} }
+    if (obj.STW_QB && typeof obj.STW_QB === 'object' && Object.keys(obj.STW_QB).length) {
+      return obj.STW_QB;
+    }
+
+    // Single-file new format:
+    // { stage:{key,label}, unit:{key,label}, focus:{key,label}, d:{1:[],2:[],3:[]} }
+    // Keep RAW so true load mode can use it directly.
+    if (obj?.stage?.key && obj?.unit?.key && obj?.focus?.key) {
+      return {
+        stage: {
+          key: String(obj.stage.key),
+          label: String(obj.stage.label || obj.stage.key)
+        },
+        unit: {
+          key: String(obj.unit.key),
+          label: String(obj.unit.label || obj.unit.key)
+        },
+        focus: {
+          key: String(obj.focus.key),
+          label: String(obj.focus.label || obj.focus.key)
+        },
+        d: ensureD(obj.d)
+      };
+    }
+
+    // Already a full QB tree
+    if (Object.keys(obj).length) return obj;
+    return null;
   }
 
   function _parseQBFileText(text) {
@@ -71,13 +137,24 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     // 2) JS export / literal path
     try {
       let src = String(text);
+      src = src.replace(/^\uFEFF/, '');
       src = src.replace(/\bexport\s+const\s+/g, 'const ');
-      src = src.replace(/\bexport\s+default\s+/g, '');
+      src = src.replace(/\bexport\s+let\s+/g, 'let ');
+      src = src.replace(/\bexport\s+var\s+/g, 'var ');
+      src = src.replace(/\bexport\s+default\s+/g, 'const __QB_DEFAULT__ = ');
       src = src.replace(/\bexport\s*\{[^}]*\}\s*;?/g, '');
 
       const fn = new Function(
         'exports',
-        `${src}; return (typeof STW_QB !== 'undefined' ? STW_QB : (exports.STW_QB || exports.default || null));`
+        `let STW_QB;
+         ${src};
+         return (typeof __QB_DEFAULT__ !== 'undefined'
+           ? __QB_DEFAULT__
+           : (typeof STW_QB !== 'undefined' && STW_QB
+               ? STW_QB
+               : (typeof exports !== 'undefined' ? (exports.STW_QB || exports.default) : null)
+             )
+         );`
       );
       const out = fn({});
       return _normalizeUploadedQB(out);
@@ -91,37 +168,57 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     return Object.entries(qb).map(([key, v]) => ({ key, label: v?.label || key }));
   }
 
-  function _qbGetSubcategories(categoryKey) {
+  function _qbGetUnits(categoryKey) {
     const qb = _qbActive || {};
     const cat = qb?.[categoryKey];
     const subs = cat?.subs || {};
     return Object.entries(subs).map(([key, v]) => ({ key, label: v?.label || key }));
   }
 
-  function _qbGetRandomQuestion(categoryKey, difficulty = 1, subcategoryKey = null) {
+  function _qbGetFocuses(categoryKey, unitKey) {
+    const qb = _qbActive || {};
+    const unit = qb?.[categoryKey]?.subs?.[unitKey];
+    const subs = unit?.subs || {};
+    return Object.entries(subs).map(([key, v]) => ({ key, label: v?.label || key }));
+  }
+
+  function _isLoadedSingleQB(obj) {
+    return !!(obj?.stage?.key && obj?.unit?.key && obj?.focus?.key && obj?.d);
+  }
+  function _qbGetRandomQuestion(categoryKey, unitKey = null, focusKey = null, difficulty = 1) {
     const qb = _qbActive || {};
     const catKeys = Object.keys(qb);
     const catKey = qb?.[categoryKey] ? categoryKey : (catKeys[0] || null);
     const d = (Number(difficulty) === 1 || Number(difficulty) === 2 || Number(difficulty) === 3) ? Number(difficulty) : 1;
 
     if (!catKey) {
-      return { category: null, subcategory: null, difficulty: d, question: 'No categories in bank.', answer: '—' };
+      return { category: null, unit: null, focus: null, difficulty: d, question: 'No categories in bank.', answer: '—' };
     }
 
     const cat = qb[catKey];
-    const subs = cat?.subs || {};
-    const subKeys = Object.keys(subs);
-    const subKey = (subcategoryKey && subs?.[subcategoryKey]) ? subcategoryKey : (subKeys[0] || null);
+    const units = cat?.subs || {};
+    const unitKeys = Object.keys(units);
+    const resolvedUnitKey = (unitKey && units?.[unitKey]) ? unitKey : (unitKeys[0] || null);
+
+    const focuses = units?.[resolvedUnitKey]?.subs || {};
+    const focusKeys = Object.keys(focuses);
+    const resolvedFocusKey = (focusKey && focuses?.[focusKey]) ? focusKey : (focusKeys[0] || null);
 
     let pool = [];
-    if (subKey && subs?.[subKey]) {
-      pool = subs[subKey]?.d?.[d] || subs[subKey]?.d?.[String(d)] || [];
+    if (resolvedFocusKey && focuses?.[resolvedFocusKey]) {
+      pool = focuses[resolvedFocusKey]?.d?.[d] || focuses[resolvedFocusKey]?.d?.[String(d)] || [];
     }
     if (!Array.isArray(pool) || !pool.length) {
-      // fallback: any available items in this cat
-      for (const sk of subKeys) {
-        const arr = subs[sk]?.d?.[d] || subs[sk]?.d?.[String(d)] || [];
-        if (Array.isArray(arr) && arr.length) { pool = arr; break; }
+      for (const uk of unitKeys) {
+        const fks = Object.keys(units?.[uk]?.subs || {});
+        for (const fk of fks) {
+          const arr = units?.[uk]?.subs?.[fk]?.d?.[d] || units?.[uk]?.subs?.[fk]?.d?.[String(d)] || [];
+          if (Array.isArray(arr) && arr.length) {
+            pool = arr;
+            break;
+          }
+        }
+        if (pool.length) break;
       }
     }
 
@@ -132,13 +229,29 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     const question = String(item?.q ?? item?.question ?? '—');
     const answer = String(item?.a ?? item?.answer ?? '—');
 
-    return { category: catKey, subcategory: subKey, difficulty: d, question, answer };
+    return { category: catKey, unit: resolvedUnitKey, focus: resolvedFocusKey, difficulty: d, question, answer };
   }
 
+  function _qbGetRandomQuestionLoaded(difficulty = 1) {
+    const d = (Number(difficulty) === 1 || Number(difficulty) === 2 || Number(difficulty) === 3)
+      ? Number(difficulty) : 1;
+
+    const arr = _qbLoadedSingle?.d?.[d] || _qbLoadedSingle?.d?.[String(d)] || [];
+    if (!Array.isArray(arr) || !arr.length) {
+      return { question: 'No questions in loaded bank.', answer: '—' };
+    }
+
+    const item = arr[Math.floor(Math.random() * arr.length)];
+    return {
+      question: String(item?.q ?? item?.question ?? '—'),
+      answer: String(item?.a ?? item?.answer ?? '—')
+    };
+  }
+ 
   function _setQBSourceLabel() {
     const el = _qs('[data-stw-qbsource]');
     if (!el) return;
-    el.textContent = (_qbSource === 'uploaded') ? 'Uploaded' : 'Built-in';
+    el.textContent = (_qbSource === 'uploaded') ? 'Loaded' : 'Built-in';
   }
 
 
@@ -324,9 +437,9 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     if (sel) sel.value = _category;
   
 
-    // When category changes, rebuild subcategories and select first
-    _renderSubcategories();
-    _setSubcategory(_firstSubcategoryKey() || '');
+    _renderUnits();
+    _setSubcategory(_firstUnitKey() || '');
+    _saveQBSelection();
 
     _updateModalCategoryLabel();
   }
@@ -335,18 +448,30 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     _subcategory = String(sub || '');
     const sel = _qs('select[data-stw-subcategory]');
     if (sel) sel.value = _subcategory;
+    _renderFocuses();
+    _setFocus(_firstFocusKey() || '');
+    _saveQBSelection();
     _updateModalCategoryLabel();
   }
 
-  function _firstCategoryKey() {
-    const cats = _qbGetCategories() || [];
-    return cats[0]?.key || '';
+  function _setFocus(focus) {
+    _focus = String(focus || '');
+    const sel = _qs('select[data-stw-focus]');
+    if (sel) sel.value = _focus;
+    _saveQBSelection();    
+    _updateModalCategoryLabel();
   }
 
-  function _firstSubcategoryKey() {
-    const subs = _qbGetSubcategories(_category) || [];
+  function _firstUnitKey() {
+    const subs = _qbGetUnits(_category) || [];
     return subs[0]?.key || '';
   }
+
+  function _firstFocusKey() {
+    const focuses = _qbGetFocuses(_category, _subcategory) || [];
+    return focuses[0]?.key || '';
+  }
+
 
   function _getCategoryLabel(key) {
     const cats = _qbGetCategories() || [];
@@ -354,24 +479,51 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     return hit?.label || key || '—';
   }
 
-  function _getSubcategoryLabel(catKey, subKey) {
-    const subs = _qbGetSubcategories(catKey) || [];
+  function _getUnitLabel(catKey, subKey) {
+    const subs = _qbGetUnits(catKey) || [];
     const hit = subs.find(x => x.key === subKey);
     return hit?.label || subKey || '';
   }
 
+  function _getFocusLabel(catKey, unitKey, focusKey) {
+    const subs = _qbGetFocuses(catKey, unitKey) || [];
+    const hit = subs.find(x => x.key === focusKey);
+    return hit?.label || focusKey || '';
+  }
+
   function _updateModalCategoryLabel() {
     if (!_modalEl) return;
+
+    if (_qbSource === 'uploaded') {
+      const label = [
+        _qbLoadedSingle?.stage?.label,
+        _qbLoadedSingle?.unit?.label,
+        _qbLoadedSingle?.focus?.label
+      ].filter(Boolean).join(' / ');
+
+      _qsm('[data-stw-cat]').textContent = label || 'Loaded Bank';
+      return;
+    }
+
     const catLabel = _getCategoryLabel(_category);
-    const subLabel = _subcategory ? _getSubcategoryLabel(_category, _subcategory) : '';
-    const label = subLabel ? `${catLabel} / ${subLabel}` : catLabel;
+    const unitLabel = _subcategory ? _getUnitLabel(_category, _subcategory) : '';
+    const focusLabel = _focus ? _getFocusLabel(_category, _subcategory, _focus) : '';
+    const parts = [catLabel, unitLabel, focusLabel].filter(Boolean);
+    const label = parts.join(' / ');
     _qsm('[data-stw-cat]').textContent = label;
   }
 
-  function _renderSubcategories() {
+  function _renderFocuses() {
+    const sel = _qs('select[data-stw-focus]');
+    if (!sel) return;
+    const focuses = _qbGetFocuses(_category, _subcategory) || [];
+    sel.innerHTML = focuses.map(s => `<option value="${_esc(s.key)}">${_esc(s.label || s.key)}</option>`).join('');
+  }
+
+  function _renderUnits() {
     const sel = _qs('select[data-stw-subcategory]');
     if (!sel) return;
-    const subs = _qbGetSubcategories(_category) || [];
+    const subs = _qbGetUnits(_category) || [];
     sel.innerHTML = subs.map(s => `<option value="${_esc(s.key)}">${_esc(s.label || s.key)}</option>`).join('');
   }
 
@@ -445,7 +597,9 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     _questionStarted = true;
     _difficulty = chosen;
 
-    const q = _qbGetRandomQuestion(_category, chosen, _subcategory || null);
+    const q = (_qbSource === 'uploaded')
+      ? _qbGetRandomQuestionLoaded(chosen)
+      : _qbGetRandomQuestion(_category, _subcategory || null, _focus || null, chosen);
 
     _qsm('[data-stw-d]').textContent = String(chosen);
     _qsm('[data-stw-q]').textContent = q?.question || '—';
@@ -453,6 +607,7 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
 
     _qsm('[data-stw-q-wrap]')?.classList.remove('stw-qPending');    
     _qsm('[data-stw-t-wrap]')?.classList.remove('hidden');
+    _qsm('[data-stw-reveal]') && (_qsm('[data-stw-reveal]').disabled = false);
 
     // Enable marking buttons now that a real question exists
     const ok = _qsm('[data-stw-correct]');
@@ -508,7 +663,8 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
             <button class="d" data-stw-summon="1">1</button>
             <button class="d" data-stw-summon="2">2</button>
             <button class="d" data-stw-summon="3">3</button>
-            <span class="mono stw-diffHint">Hotkeys: 1 / 2 / 3</span>
+            <button class="d" data-stw-reveal disabled>Reveal</button>
+            <span class="mono stw-diffHint">Hotkeys: 1 / 2 / 3 • Reveal: 4</span>
          </div>
        </div>
 
@@ -549,6 +705,7 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     _qsm('[data-stw-t-wrap]')?.classList.add('hidden');
     _qsm('[data-stw-correct]') && (_qsm('[data-stw-correct]').disabled = true);
     _qsm('[data-stw-incorrect]') && (_qsm('[data-stw-incorrect]').disabled = true);
+    _qsm('[data-stw-reveal]') && (_qsm('[data-stw-reveal]').disabled = true);
 
     // handlers
     _modalEl.addEventListener('click', (e) => {
@@ -559,6 +716,12 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
 
       if (t.matches('[data-stw-summon]')) {
         _summonQuestion(t.getAttribute('data-stw-summon'));
+      }
+
+      if (t.matches('[data-stw-reveal]')) {
+        if (!_questionStarted) return;
+        _qsm('[data-stw-a-wrap]')?.classList.remove('hidden');
+        _stopTimers();
       }
 
       if (t.matches('[data-stw-correct]')) {
@@ -991,7 +1154,7 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
         <div class="stw-row">
           <div class="mono" style="opacity:.85; margin-bottom:6px;">Question bank: <span data-stw-qbsource>Built-in</span></div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button data-stw-uploadQB>Upload QB</button>
+            <button data-stw-uploadQB>Load QB</button>
             <button data-stw-useBuiltInQB>Use built-in</button>
             <input type="file" data-stw-qbfile style="display:none" accept=".json,.js,.txt" />
           </div>
@@ -1004,8 +1167,13 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
         </div>
 
         <div class="stw-row">
-          <div class="mono" style="opacity:.85; margin-bottom:6px;">Subcategory</div>
+          <div class="mono" style="opacity:.85; margin-bottom:6px;">Unit</div>
           <select data-stw-subcategory></select>
+        </div>
+
+        <div class="stw-row">
+          <div class="mono" style="opacity:.85; margin-bottom:6px;">Focus</div>
+          <select data-stw-focus></select>
         </div>
 
         <div class="stw-row stw-actions">
@@ -1025,17 +1193,31 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
     _hostEl.appendChild(_rootEl);
 
     // populate category dropdown
+
+    _qbBuiltIn = window.STW_QB || {};
+    _qbActive = _qbBuiltIn;
+    _qbSource = 'builtin';
+
     const catsRaw = _qbGetCategories() || [];
-    const order = ['quickmath', 'stage4', 'stage5'];
+    const ORDER = ['quickmath', 'support', 'year7', 'year8', 'year9', 'year10'];
     const cats = [
-      ...order.map(k => catsRaw.find(c => c.key === k)).filter(Boolean),
-      ...catsRaw.filter(c => !order.includes(c.key))
+      ...ORDER.map(k => catsRaw.find(c => c.key === k)).filter(Boolean),
+      ...catsRaw.filter(c => !ORDER.includes(c.key))
     ];
     const sel = _qs('select[data-stw-category]');
     if (sel) {
       sel.innerHTML = cats.map(c => `<option value="${_esc(c.key)}">${_esc(c.label || c.key)}</option>`).join('');
     }
-    _setCategory(cats[0]?.key || '');
+    _loadQBSelection();
+
+    const validCat = cats.find(c => c.key === _category)?.key || '';
+    _setCategory(validCat || cats[0]?.key || '');
+
+    const validSub = _qbGetUnits(_category).find(s => s.key === _subcategory)?.key || '';
+    _setSubcategory(validSub || _firstUnitKey() || '');
+
+    const validFocus = _qbGetFocuses(_category, _subcategory).find(f => f.key === _focus)?.key || '';
+    _setFocus(validFocus || _firstFocusKey() || '');
     _setDifficulty(1);
     _updateCounts();
     _refreshWheel('Ready');
@@ -1051,31 +1233,50 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
         try {
           const text = await f.text();
           const qb = _parseQBFileText(text);
+
           if (!qb) {
             const note = _qs('[data-stw-note]');
             if (note) note.textContent = 'QB upload failed (could not parse).';
             _setQBSourceLabel();
             return;
           }
-          _qbUploaded = qb;
-          _qbActive = _qbUploaded;
           _qbSource = 'uploaded';
 
-          // rebuild categories/subcategories
-          const catsRaw2 = _qbGetCategories() || [];
-          const cats2 = [
-            ...order.map(k => catsRaw2.find(c => c.key === k)).filter(Boolean),
-            ...catsRaw2.filter(c => !order.includes(c.key))
-          ];
-          const sel2 = _qs('select[data-stw-category]');
-          if (sel2) {
-            sel2.innerHTML = cats2.map(c => `<option value="${_esc(c.key)}">${_esc(c.label || c.key)}</option>`).join('');
+          if (_isLoadedSingleQB(qb)) {
+            // TRUE LOAD MODE (no category system)
+            _qbLoadedSingle = qb;
+            _qbUploaded = null;
+            _qbActive = _qbBuiltIn; // leave built-in untouched
+          } else {
+            // fallback: full QB tree (rare)
+            _qbLoadedSingle = null;
+            _qbUploaded = qb;
+            _qbActive = _qbUploaded;
+
+            // rebuild categories/subcategories only for full-tree loads
+            const catsRaw2 = _qbGetCategories() || [];
+            const ORDER = ['quickmath', 'support', 'year7', 'year8', 'year9', 'year10'];
+            const cats2 = [
+              ...ORDER.map(k => catsRaw2.find(c => c.key === k)).filter(Boolean),
+              ...catsRaw2.filter(c => !ORDER.includes(c.key))
+            ];
+            const sel2 = _qs('select[data-stw-category]');
+            if (sel2) {
+              sel2.innerHTML = cats2.map(c => `<option value="${_esc(c.key)}">${_esc(c.label || c.key)}</option>`).join('');
+            }
+            _setCategory(cats2[0]?.key || '');
+            _setSubcategory(_firstUnitKey() || '');
+            _setFocus(_firstFocusKey() || '');
           }
-          _setCategory(cats2[0]?.key || '');
+
           _setQBSourceLabel();
 
+          _qs('select[data-stw-category]')?.closest('.stw-row')?.classList.add('hidden');
+          _qs('select[data-stw-subcategory]')?.closest('.stw-row')?.classList.add('hidden');
+          _qs('select[data-stw-focus]')?.closest('.stw-row')?.classList.add('hidden');
+
           const note = _qs('[data-stw-note]');
-          if (note) note.textContent = 'Using uploaded question bank.';
+          if (note) note.textContent = 'Loaded temporary question bank.';
         } catch {
           const note = _qs('[data-stw-note]');
           if (note) note.textContent = 'QB upload failed.';
@@ -1095,22 +1296,38 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
       }
 
       if (t.matches('[data-stw-useBuiltInQB]')) {
+        _qbBuiltIn = window.STW_QB || {};
         _qbActive = _qbBuiltIn;
         _qbSource = 'builtin';
         _qbUploaded = null;
+        _qbLoadedSingle = null;
+
+        _qs('select[data-stw-category]')?.closest('.stw-row')?.classList.remove('hidden');
+        _qs('select[data-stw-subcategory]')?.closest('.stw-row')?.classList.remove('hidden');
+        _qs('select[data-stw-focus]')?.closest('.stw-row')?.classList.remove('hidden');
 
         const catsRaw2 = _qbGetCategories() || [];
-        const order2 = ['quickmath', 'stage4', 'stage5'];
+        const ORDER = ['quickmath', 'support', 'year7', 'year8', 'year9', 'year10'];
         const cats2 = [
-          ...order2.map(k => catsRaw2.find(c => c.key === k)).filter(Boolean),
-          ...catsRaw2.filter(c => !order2.includes(c.key))
+          ...ORDER.map(k => catsRaw2.find(c => c.key === k)).filter(Boolean),
+          ...catsRaw2.filter(c => !ORDER.includes(c.key))
         ];
         const sel2 = _qs('select[data-stw-category]');
         if (sel2) {
           sel2.innerHTML = cats2.map(c => `<option value="${_esc(c.key)}">${_esc(c.label || c.key)}</option>`).join('');
         }
-        _setCategory(cats2[0]?.key || '');
+        _loadQBSelection();
+
+        const validCat2 = cats2.find(c => c.key === _category)?.key || '';
+        _setCategory(validCat2 || cats2[0]?.key || '');
+
+        const validSub2 = _qbGetUnits(_category).find(s => s.key === _subcategory)?.key || '';
+        _setSubcategory(validSub2 || _firstUnitKey() || '');
+
+        const validFocus2 = _qbGetFocuses(_category, _subcategory).find(f => f.key === _focus)?.key || '';
+        _setFocus(validFocus2 || _firstFocusKey() || '');
         _setQBSourceLabel();
+
 
         const note = _qs('[data-stw-note]');
         if (note) note.textContent = 'Using built-in question bank.';
@@ -1123,6 +1340,10 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
 
       if (t.matches('select[data-stw-subcategory]')) {
         _setSubcategory(t.value);
+      }
+
+      if (t.matches('select[data-stw-focus]')) {
+        _setFocus(t.value);
       }
 
       if (t.matches('[data-stw-reset]')) _resetPicked('manual');
@@ -1152,8 +1373,6 @@ import { STW_QB as STW_QB_BUILTIN } from './stw.questionbank.pc091.js';
         const winnerIndex = candidates.findIndex(s => String(s.id) === id);
         await _spinWheelToWinnerIndex(winnerIndex, candidates.length);
 
-
-        const q = _qbGetRandomQuestion(_category, _difficulty);
         _openModal({
           studentId: id,
           name: (winner.name || winner.label || String(winner.id) || '').trim()

@@ -35,9 +35,13 @@
     riskBoostByTeam: new Map(),
 
     qbBuiltIn: null,
+    qbUploaded: null,
+    qbLoadedSingle: null,
+    qbSource: 'builtin',
     qb: null,
     cat: '',
     sub: '',
+    focus: '',
 
     modalEl: null,
     modalKeyHandler: null,
@@ -52,11 +56,42 @@
     elStatus: null,
     elCat: null,
     elSub: null,
-    elBtnSelect: null,  
+    elFocus: null,
+    elBtnSelect: null,
+    elBtnLoadQB: null,
+    elBtnUseBuiltInQB: null,
+    elQbFile: null,
+
+    _resultsShowing: false,
+    _allowImmediateUnmount: false, 
   };
 
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  const QB_STORAGE_KEY = 'ce.qb.lastSelection';
+
+  function saveQBSelection() {
+    if (MOD.qbSource !== 'builtin') return;
+    try {
+      localStorage.setItem(QB_STORAGE_KEY, JSON.stringify({
+        cat: MOD.cat,
+        sub: MOD.sub,
+        focus: MOD.focus
+      }));
+    } catch {}
+  }
+
+  function loadQBSelection() {
+    try {
+      const raw = localStorage.getItem(QB_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data?.cat) MOD.cat = String(data.cat);
+      if (data?.sub) MOD.sub = String(data.sub);
+      if (data?.focus) MOD.focus = String(data.focus);
+    } catch {}
+  }
 
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -67,11 +102,11 @@
   }
 
   function ensureStyles() {
-    if (document.getElementById('ce-quadconnect-styles')) return;
+    if (document.getElementById('ce-hexflex-styles')) return;
     const s = document.createElement('style');
-    s.id = 'ce-quadconnect-styles';
+    s.id = 'ce-hexflex-styles';
     s.textContent = `
-      .ce-qc-root{
+      #ce-hexflex-root .ce-qc-root{
         position:absolute; inset:0;
         padding:12px;
         display:flex;
@@ -82,35 +117,35 @@
         min-height:0;
         box-sizing:border-box;
       }
-      .ce-qc-headerrow{
+      #ce-hexflex-root .ce-qc-headerrow{
         display:flex;
         flex-wrap:wrap;
         gap:10px;
         align-items:center;
         margin-top:10px;
       }
-      .ce-qc-headerrow > *{
+      #ce-hexflex-root .ce-qc-headerrow > *{
         min-width:0;
       }
-      .ce-qc-card{
+      #ce-hexflex-root .ce-qc-card{
         background:rgba(255,255,255,0.05);
         border:1px solid rgba(255,255,255,0.10);
         border-radius:14px;
         padding:16px;
       }
-      .ce-qc-title{
+      #ce-hexflex-root .ce-qc-title{
         font-size:18px;
         font-weight:900;
         margin:0 0 8px 0;
       }
 
-      .ce-qc-teambar{
+      #ce-hexflex-root .ce-qc-teambar{
         display:flex;
         gap:8px;
         flex-wrap:wrap;
         margin-top:0;
       }
-      .ce-qc-teampill{
+      #ce-hexflex-root .ce-qc-teampill{
         display:inline-flex;
         align-items:center;
         gap:8px;
@@ -120,18 +155,18 @@
         border:1px solid rgba(255,255,255,0.10);
         font-weight:850;
       }
-      .ce-qc-turnbox{
+      #ce-hexflex-root .ce-qc-turnbox{
         margin-top:10px;
         display:flex;
         flex-wrap:wrap;
         gap:10px;
         align-items:center;
       }
-      .ce-qc-turnstatus{
+      #ce-hexflex-root .ce-qc-turnstatus{
         font-weight:800;
         opacity:0.9;
       }
-      .ce-qc-turnmeta{
+      #ce-hexflex-root .ce-qc-turnmeta{
         display:flex;
         align-items:center;
         gap:10px;
@@ -141,11 +176,11 @@
         border:1px solid rgba(255,255,255,0.10);
         font-weight:850;
       }
-      .ce-qc-turnmeta .ce-qc-label{
+      #ce-hexflex-root .ce-qc-turnmeta .ce-qc-label{
         opacity:0.78;
         font-weight:800;
       }
-      .ce-qc-btn{
+      #ce-hexflex-root .ce-qc-btn{
         appearance:none;
         border:0;
         cursor:pointer;
@@ -155,13 +190,13 @@
         color:#fff;
         font-weight:900;
       }
-      .ce-qc-btn:hover{ background:rgba(80,140,255,0.45); }
-      .ce-qc-btn:active{ transform:translateY(1px); }
-      .ce-qc-btn[disabled]{
+      #ce-hexflex-root .ce-qc-btn:hover{ background:rgba(80,140,255,0.45); }
+      #ce-hexflex-root .ce-qc-btn:active{ transform:translateY(1px); }
+      #ce-hexflex-root .ce-qc-btn[disabled]{
         opacity:0.45;
         cursor:not-allowed;
       }
-      .ce-qc-dot{
+      #ce-hexflex-root .ce-qc-dot{
         width:12px;
         height:12px;
         border-radius:999px;
@@ -182,44 +217,44 @@
         background: linear-gradient(90deg, rgba(255,165,0,0.20), rgba(255,165,0,0.06)) !important;
 
       }
-      .ce-qc-dot.red{ background:rgba(255,90,90,0.95); }
-      .ce-qc-dot.blue{ background:rgba(80,140,255,0.95); }
-      .ce-qc-dot.green{ background:rgba(70,200,120,0.95); }
-      .ce-qc-dot.yellow{ background:rgba(255,210,70,0.95); }
-      .ce-qc-turnmeta[data-qc-team="red"]{
+      #ce-hexflex-root .ce-qc-dot.red{ background:rgba(255,90,90,0.95); }
+      #ce-hexflex-root .ce-qc-dot.blue{ background:rgba(80,140,255,0.95); }
+      #ce-hexflex-root .ce-qc-dot.green{ background:rgba(70,200,120,0.95); }
+      #ce-hexflex-root .ce-qc-dot.yellow{ background:rgba(255,210,70,0.95); }
+      #ce-hexflex-root .ce-qc-turnmeta[data-qc-team="red"]{
         background:rgba(255,90,90,0.14);
         border-color:rgba(255,90,90,0.30);
       }
-      .ce-qc-turnmeta[data-qc-team="blue"]{
+      #ce-hexflex-root .ce-qc-turnmeta[data-qc-team="blue"]{
         background:rgba(80,140,255,0.14);
         border-color:rgba(80,140,255,0.30);
       }
-      .ce-qc-turnmeta[data-qc-team="green"]{
+      #ce-hexflex-root .ce-qc-turnmeta[data-qc-team="green"]{
         background:rgba(70,200,120,0.14);
         border-color:rgba(70,200,120,0.30);
       }
-      .ce-qc-turnmeta[data-qc-team="yellow"]{
+      #ce-hexflex-root .ce-qc-turnmeta[data-qc-team="yellow"]{
         background:rgba(255,210,70,0.14);
         border-color:rgba(255,210,70,0.30);
       }
-      .ce-qc-dot.purple{ background:rgba(180,110,255,0.95); }
-      .ce-qc-dot.orange{ background:rgba(255,155,70,0.95); }
-      .ce-qc-dot.cyan{ background:rgba(70,220,255,0.95); }
-      .ce-qc-dot.pink{ background:rgba(255,120,190,0.95); }
-      .ce-qc-controls{
+      #ce-hexflex-root .ce-qc-dot.purple{ background:rgba(180,110,255,0.95); }
+      #ce-hexflex-root .ce-qc-dot.orange{ background:rgba(255,155,70,0.95); }
+      #ce-hexflex-root .ce-qc-dot.cyan{ background:rgba(70,220,255,0.95); }
+      #ce-hexflex-root .ce-qc-dot.pink{ background:rgba(255,120,190,0.95); }
+      #ce-hexflex-root .ce-qc-controls{
         display:flex;
         flex-wrap:wrap;
         gap:10px;
         align-items:center;
         margin-left:auto;
       }
-      .ce-qc-field{
+      #ce-hexflex-root .ce-qc-field{
         display:flex;
         align-items:center;
         gap:5px;
         min-width:0;
       }
-      .ce-qc-fieldlabel{
+      #ce-hexflex-root .ce-qc-fieldlabel{
         font-size:11px;
         opacity:0.72;
         font-weight:900;
@@ -227,7 +262,7 @@
         text-transform:uppercase;
         white-space:nowrap;
       }
-      .ce-qc-select{
+      #ce-hexflex-root .ce-qc-select{
         width:auto;
         min-width:118px;
         max-width:158px;
@@ -241,13 +276,13 @@
         line-height:1.15;
         outline:none;
       }
-      .ce-qc-btn.qc-open{
+      #ce-hexflex-root .ce-qc-btn.qc-open{
         padding:10px 16px;
         font-size:14px;
         font-weight:950;
         white-space:nowrap;
       }
-      .ce-qc-status{
+      #ce-hexflex-root .ce-qc-status{
         margin-top:10px;
         padding:10px 12px;
         border-radius:12px;
@@ -255,7 +290,7 @@
         border:1px solid rgba(255,255,255,0.10);
         font-weight:800;
       }
-      .qc-modal{
+      #ce-hexflex-root .qc-modal{
         position:absolute;
         inset:0;
         background:rgba(0,0,0,0.45);
@@ -264,7 +299,7 @@
         justify-content:center;
         z-index:50;
       }
-      .qc-modal-card{
+      #ce-hexflex-root .qc-modal-card{
         width:min(1100px, 94vw);
         background:#e8f0ff;
         color:#0f172a;
@@ -272,14 +307,14 @@
         padding:22px;
         box-shadow:0 12px 28px rgba(15,23,42,0.25);
       }
-      .qc-modal-h{
+      #ce-hexflex-root .qc-modal-h{
         position:relative;
         display:flex;
         justify-content:center;
         align-items:center;
         margin-bottom:8px;
       }
-      .qc-modal-title{
+      #ce-hexflex-root .qc-modal-title{
         width:100%;
         text-align:center;
         color:#0b3c8a;
@@ -287,7 +322,7 @@
         font-weight:900;
         letter-spacing:-0.6px;
       }
-      .qc-x{
+      #ce-hexflex-root .qc-x{
         position:absolute;
         right:0;
         top:0;
@@ -300,24 +335,24 @@
         font-size:22px;
         font-weight:900;
       }
-      .qc-x:hover{ background:rgba(15,23,42,0.08); }
-      .qc-row{ margin-top:10px; }
-      .qc-mono{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-      .qc-label{ font-size:12px; opacity:0.8; font-weight:900; letter-spacing:0.6px; text-transform:uppercase; color:#0f172a; }
-      .qc-q{ font-size:38px; line-height:1.25; font-weight:900; letter-spacing:-0.6px; margin-top:6px; color:#0f172a; }
-      .qc-a{ font-size:34px; line-height:1.25; font-weight:900; letter-spacing:-0.4px; margin-top:6px; color:#1e293b; }
-      .qc-diffGroup{ display:flex; gap:0; align-items:center; flex-wrap:wrap; margin-top:6px; }
-      .qc-diffBtn{ min-width:64px; height:44px; border-radius:0; border:2px solid #93c5fd; background:#e0e7ff; color:#0f172a; font-weight:900; cursor:pointer; }
-      .qc-diffBtn:first-child{ border-top-left-radius:12px; border-bottom-left-radius:12px; }
-      .qc-diffBtn:last-child{ border-top-right-radius:12px; border-bottom-right-radius:12px; }
-      .qc-diffBtn:hover{ background:#dbeafe; }
-      .qc-footer{ margin-top:14px; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
-      .qc-footer .ce-qc-btn{ background:#e0e7ff; color:#0f172a; border:2px solid #93c5fd; }
-      .qc-footer .ce-qc-btn:hover{ background:#dbeafe; }
-      .qc-ok{ background:#bbf7d0 !important; border-color:#22c55e !important; color:#065f46 !important; }
-      .qc-timer{ margin-top:8px; font-weight:900; }
-      .qc-timer [data-qc-t]{ font-size:34px; font-weight:900; color:#ca8a04; letter-spacing:0.5px; }
-      .ce-qc-board{
+      #ce-hexflex-root .qc-x:hover{ background:rgba(15,23,42,0.08); }
+      #ce-hexflex-root .qc-row{ margin-top:10px; }
+      #ce-hexflex-root .qc-mono{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+      #ce-hexflex-root .qc-label{ font-size:12px; opacity:0.8; font-weight:900; letter-spacing:0.6px; text-transform:uppercase; color:#0f172a; }
+      #ce-hexflex-root .qc-q{ font-size:38px; line-height:1.25; font-weight:900; letter-spacing:-0.6px; margin-top:6px; color:#0f172a; }
+      #ce-hexflex-root .qc-a{ font-size:34px; line-height:1.25; font-weight:900; letter-spacing:-0.4px; margin-top:6px; color:#1e293b; }
+      #ce-hexflex-root .qc-diffGroup{ display:flex; gap:0; align-items:center; flex-wrap:wrap; margin-top:6px; }
+      #ce-hexflex-root .qc-diffBtn{ min-width:64px; height:44px; border-radius:0; border:2px solid #93c5fd; background:#e0e7ff; color:#0f172a; font-weight:900; cursor:pointer; }
+      #ce-hexflex-root .qc-diffBtn:first-child{ border-top-left-radius:12px; border-bottom-left-radius:12px; }
+      #ce-hexflex-root .qc-diffBtn:last-child{ border-top-right-radius:12px; border-bottom-right-radius:12px; }
+      #ce-hexflex-root .qc-diffBtn:hover{ background:#dbeafe; }
+      #ce-hexflex-root .qc-footer{ margin-top:14px; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+      #ce-hexflex-root .qc-footer .ce-qc-btn{ background:#e0e7ff; color:#0f172a; border:2px solid #93c5fd; }
+      #ce-hexflex-root .qc-footer .ce-qc-btn:hover{ background:#dbeafe; }
+      #ce-hexflex-root .qc-ok{ background:#bbf7d0 !important; border-color:#22c55e !important; color:#065f46 !important; }
+      #ce-hexflex-root .qc-timer{ margin-top:8px; font-weight:900; }
+      #ce-hexflex-root .qc-timer [data-qc-t]{ font-size:34px; font-weight:900; color:#ca8a04; letter-spacing:0.5px; }
+      #ce-hexflex-root .ce-qc-board{
         flex:1 1 auto;
         min-height:0;
         display:grid;
@@ -328,22 +363,22 @@
         border-radius:14px;
         padding:4px;
       }
-      .ce-qc-axis,
-      .ce-qc-cell{
+      #ce-hexflex-root .ce-qc-axis,
+      #ce-hexflex-root .ce-qc-cell{
         display:flex;
         align-items:center;
         justify-content:center;
         border-radius:8px;
         font-weight:900;
       }
-      .ce-qc-axis{
+      #ce-hexflex-root .ce-qc-axis{
         background:#e5e7eb;
         border:1px solid #d1d5db;
         color:#111827;
         font-weight:800;
         font-size:10px;
       }
-      .ce-qc-cell{
+      #ce-hexflex-root .ce-qc-cell{
         min-height:20px;
         background:#e5e7eb;
         border:1px solid #d1d5db;
@@ -353,10 +388,10 @@
 
 
       /* token colour halo (subtle board hint) */
-      .ce-qc-cell.is-red::before,
-      .ce-qc-cell.is-blue::before,
-      .ce-qc-cell.is-green::before,
-      .ce-qc-cell.is-yellow::before{
+      #ce-hexflex-root .ce-qc-cell.is-red::before,
+      #ce-hexflex-root .ce-qc-cell.is-blue::before,
+      #ce-hexflex-root .ce-qc-cell.is-green::before,
+      #ce-hexflex-root .ce-qc-cell.is-yellow::before{
         content:'';
         position:absolute;
         inset:0;
@@ -364,7 +399,7 @@
         pointer-events:none;
       }
 
-      .ce-qc-cell.is-red::before{
+      #ce-hexflex-root .ce-qc-cell.is-red::before{
         background:radial-gradient(circle at center,
           rgba(255,90,90,0.55) 0%,
           rgba(255,90,90,0.28) 40%,
@@ -372,7 +407,7 @@
           rgba(255,90,90,0) 100%);
       }
 
-      .ce-qc-cell.is-blue::before{
+      #ce-hexflex-root .ce-qc-cell.is-blue::before{
         background:radial-gradient(circle at center,
           rgba(80,140,255,0.55) 0%,
           rgba(80,140,255,0.28) 40%,
@@ -380,7 +415,7 @@
           rgba(80,140,255,0) 100%);
       }
 
-      .ce-qc-cell.is-green::before{
+      #ce-hexflex-root .ce-qc-cell.is-green::before{
         background:radial-gradient(circle at center,
           rgba(70,200,120,0.55) 0%,
           rgba(70,200,120,0.28) 40%,
@@ -388,7 +423,7 @@
           rgba(70,200,120,0) 100%);
       }
 
-      .ce-qc-cell.is-yellow::before{
+      #ce-hexflex-root .ce-qc-cell.is-yellow::before{
         background:radial-gradient(circle at center,
           rgba(255,210,70,0.55) 0%,
           rgba(255,210,70,0.28) 40%,
@@ -397,37 +432,37 @@
       }
 
       /* soft placement highlight */
-      .ce-qc-cell.is-armed{
+      #ce-hexflex-root .ce-qc-cell.is-armed{
         background:#dbeafe;
         border-color:#93c5fd;
       }
-      .ce-qc-cell.is-red::after,
-      .ce-qc-cell.is-blue::after,
-      .ce-qc-cell.is-green::after,
-      .ce-qc-cell.is-yellow::after{
+      #ce-hexflex-root .ce-qc-cell.is-red::after,
+      #ce-hexflex-root .ce-qc-cell.is-blue::after,
+      #ce-hexflex-root .ce-qc-cell.is-green::after,
+      #ce-hexflex-root .ce-qc-cell.is-yellow::after{
         content:'';
         width:34px;
         height:34px;
         border-radius:999px;
         border:1px solid rgba(255,255,255,0.28);
       }
-      .ce-qc-cell.is-red::after{
+      #ce-hexflex-root .ce-qc-cell.is-red::after{
         background:rgba(255,90,90,0.98);
         box-shadow:0 0 18px rgba(255,90,90,0.35);
       }
-      .ce-qc-cell.is-blue::after{
+      #ce-hexflex-root .ce-qc-cell.is-blue::after{
         background:rgba(80,140,255,0.98);
         box-shadow:0 0 18px rgba(80,140,255,0.35);
       }
-      .ce-qc-cell.is-green::after{
+      #ce-hexflex-root .ce-qc-cell.is-green::after{
         background:rgba(70,200,120,0.98);
         box-shadow:0 0 18px rgba(70,200,120,0.35);
       }
-      .ce-qc-cell.is-yellow::after{
+      #ce-hexflex-root .ce-qc-cell.is-yellow::after{
         background:rgba(255,210,70,0.98);
         box-shadow:0 0 18px rgba(255,210,70,0.35);
       }
-      .ce-qc-cell:disabled{
+      #ce-hexflex-root .ce-qc-cell:disabled{
         opacity:1;
         cursor:default;
       }
@@ -445,7 +480,12 @@
 
   function getCatOptions(qb) {
     if (!qb || typeof qb !== 'object') return [];
-    return Object.keys(qb).map((k) => ({ key: k, label: String(qb[k]?.label || k) }));
+    const ORDER = ['quickmath', 'support', 'year7', 'year8', 'year9', 'year10'];
+    const keys = [
+      ...ORDER.filter((k) => qb[k]),
+      ...Object.keys(qb).filter((k) => !ORDER.includes(k))
+    ];
+    return keys.map((k) => ({ key: k, label: String(qb[k]?.label || k) }));
   }
 
   function getSubOptions(qb, catKey) {
@@ -454,22 +494,145 @@
     return Object.keys(subs).map((k) => ({ key: k, label: String(subs[k]?.label || k) }));
   }
 
-  function pickRandomQuestion(qb, catKey, subKey, diff) {
+  function getFocusOptions(qb, catKey, subKey) {
+    const subs = qb?.[catKey]?.subs?.[subKey]?.subs;
+    if (!subs || typeof subs !== 'object') return [];
+    return Object.keys(subs).map((k) => ({ key: k, label: String(subs[k]?.label || k) }));
+  }
+
+  function pickRandomQuestion(qb, catKey, subKey, focusKey, diff) {
     const d = Number(diff);
     const chosen = (d === 1 || d === 2 || d === 3) ? d : 1;
-    const arr = qb?.[catKey]?.subs?.[subKey]?.d?.[chosen];
+    const arr = qb?.[catKey]?.subs?.[subKey]?.subs?.[focusKey]?.d?.[chosen];
     if (!Array.isArray(arr) || !arr.length) return null;
     const q = arr[Math.floor(Math.random() * arr.length)];
     if (!q) return null;
     return { q: String(q.q ?? q.question ?? '—'), a: String(q.a ?? q.answer ?? '—') };
   }
 
+  function normalizeUploadedQB(raw) {
+    const obj = raw && typeof raw === 'object' ? raw : null;
+    if (!obj) return null;
+
+    if (obj.default && typeof obj.default === 'object') {
+      return normalizeUploadedQB(obj.default);
+    }
+    if (obj.__QB_DEFAULT__ && typeof obj.__QB_DEFAULT__ === 'object') {
+      return normalizeUploadedQB(obj.__QB_DEFAULT__);
+    }
+
+    const ensureD = (d) => ({
+      1: Array.isArray(d?.[1]) ? d[1] : [],
+      2: Array.isArray(d?.[2]) ? d[2] : [],
+      3: Array.isArray(d?.[3]) ? d[3] : []
+    });
+
+    if (obj.STW_QB && typeof obj.STW_QB === 'object' && Object.keys(obj.STW_QB).length) {
+      return obj.STW_QB;
+    }
+
+    if (obj?.stage?.key && obj?.unit?.key && obj?.focus?.key) {
+      return {
+        stage: {
+          key: String(obj.stage.key),
+          label: String(obj.stage.label || obj.stage.key)
+        },
+        unit: {
+          key: String(obj.unit.key),
+          label: String(obj.unit.label || obj.unit.key)
+        },
+        focus: {
+          key: String(obj.focus.key),
+          label: String(obj.focus.label || obj.focus.key)
+        },
+        d: ensureD(obj.d)
+      };
+    }
+
+    if (Object.keys(obj).length) return obj;
+    return null;
+  }
+
+  function parseQBFileText(text) {
+    if (!text || typeof text !== 'string') return null;
+
+    try {
+      return normalizeUploadedQB(JSON.parse(text));
+    } catch {}
+
+    try {
+      let src = String(text);
+      src = src.replace(/^\uFEFF/, '');
+      src = src.replace(/\bexport\s+const\s+/g, 'const ');
+      src = src.replace(/\bexport\s+let\s+/g, 'let ');
+      src = src.replace(/\bexport\s+var\s+/g, 'var ');
+      src = src.replace(/\bexport\s+default\s+/g, 'const __QB_DEFAULT__ = ');
+      src = src.replace(/\bexport\s*\{[^}]*\}\s*;?/g, '');
+
+      const fn = new Function(
+        'exports',
+        `let STW_QB;
+         ${src};
+         return (typeof __QB_DEFAULT__ !== 'undefined'
+           ? __QB_DEFAULT__
+           : (typeof STW_QB !== 'undefined' && STW_QB
+               ? STW_QB
+               : (typeof exports !== 'undefined' ? (exports.STW_QB || exports.default) : null)
+             )
+         );`
+      );
+      const out = fn({});
+      return normalizeUploadedQB(out);
+    } catch {}
+
+    return null;
+  }
+
+  function isLoadedSingleQB(obj) {
+    return !!(obj?.stage?.key && obj?.unit?.key && obj?.focus?.key && obj?.d);
+  }
+
+  function pickRandomQuestionLoaded(singleQb, diff) {
+    const d = Number(diff);
+    const chosen = (d === 1 || d === 2 || d === 3) ? d : 1;
+    const arr = singleQb?.d?.[chosen] || singleQb?.d?.[String(chosen)] || [];
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const q = arr[Math.floor(Math.random() * arr.length)];
+    if (!q) return null;
+    return { q: String(q.q ?? q.question ?? '—'), a: String(q.a ?? q.answer ?? '—') };
+  }
+
+  function setQBSelectorMode(loadedMode) {
+    const sels = [MOD.elCat, MOD.elSub, MOD.elFocus].filter(Boolean);
+    for (const el of sels) {
+      el.disabled = !!loadedMode;
+      el.style.opacity = loadedMode ? '0.55' : '';
+      el.style.pointerEvents = loadedMode ? 'none' : '';
+    }
+  }
+
   function initBuiltInQB() {
-    MOD.qbBuiltIn = window.STW_QB || null;
+    MOD.qbBuiltIn = window.QM_QB || window.STW_QB || null;
+    MOD.qbUploaded = null;
+    MOD.qbLoadedSingle = null;
+    MOD.qbSource = 'builtin';
     MOD.qb = MOD.qbBuiltIn || null;
-    const cats = getCatOptions(MOD.qb);
-    MOD.cat = cats[0]?.key || '';
-    MOD.sub = getSubOptions(MOD.qb, MOD.cat)[0]?.key || '';
+    loadQBSelection();
+
+   const cats = getCatOptions(MOD.qb);
+    if (!MOD.cat || !cats.find(c => c.key === MOD.cat)) {
+      MOD.cat = cats.find(c => c.key === 'quickmath')?.key || cats[0]?.key || '';
+    }
+
+    const subs = getSubOptions(MOD.qb, MOD.cat);
+    if (!MOD.sub || !subs.find(s => s.key === MOD.sub)) {
+      MOD.sub = subs[0]?.key || '';
+    }
+
+    const focuses = getFocusOptions(MOD.qb, MOD.cat, MOD.sub);
+    if (!MOD.focus || !focuses.find(f => f.key === MOD.focus)) {
+      MOD.focus = focuses[0]?.key || '';
+    }
   }
 
   function getActiveStudentsFromDom() {
@@ -645,7 +808,11 @@
 
     if (MOD.placementsRemaining > 0) {
       MOD.turnState = 'awaitingPlacement';
-      setStatus(`Placed ${MOD.currentTeamKey} at ${cell}. Place 1 more dot.`);
+      const remaining = MOD.placementsRemaining;
+      const dotText = remaining === 1 ? 'dot' : 'dots';
+      setStatus(
+        `Placed ${MOD.currentTeamKey} at ${cell}. Place ${remaining} more ${dotText}.`
+      );
     } else {
       MOD.turnState = 'resolved';
       setStatus(`Placed ${MOD.currentTeamKey} at ${cell}. Turn complete. Click Select Student when ready.`);
@@ -684,13 +851,15 @@
 
   function openQuestionModal(student) {
     if (!MOD.root || !student) return;
-    if (!MOD.qb) {
+    const usingLoadedSingle = (MOD.qbSource === 'uploaded' && !!MOD.qbLoadedSingle);
+
+    if (!MOD.qb && !usingLoadedSingle) {
       setStatus('Question bank not ready.');
       syncUi();
       return;
     }
-    if (!MOD.cat || !MOD.sub) {
-      setStatus('Select a category and subcategory.');
+    if (!usingLoadedSingle && (!MOD.cat || !MOD.sub || !MOD.focus)) {
+      setStatus('Select a category, subcategory, and focus.');
       syncUi();
       return;
     }
@@ -709,7 +878,7 @@
           <button class="qc-x" data-qc-close aria-label="Close">×</button>
         </div>
         <div class="qc-row qc-mono" style="opacity:0.85;">
-          Category: <span data-qc-catlbl>—</span> &nbsp;•&nbsp; Sub: <span data-qc-sublbl>—</span>
+          Category: <span data-qc-catlbl>—</span> &nbsp;•&nbsp; Sub: <span data-qc-sublbl>—</span> &nbsp;•&nbsp; Focus: <span data-qc-focuslbl>—</span>
         </div>
         <div class="qc-row">
           <div class="qc-label qc-mono">Summon question</div>
@@ -743,10 +912,18 @@
     MOD.root.appendChild(modal);
     MOD.modalEl = modal;
 
-    const catLbl = getCatOptions(MOD.qb).find((x) => x.key === MOD.cat)?.label || MOD.cat;
-    const subLbl = getSubOptions(MOD.qb, MOD.cat).find((x) => x.key === MOD.sub)?.label || MOD.sub;
+    const catLbl = usingLoadedSingle
+      ? (MOD.qbLoadedSingle?.stage?.label || MOD.qbLoadedSingle?.stage?.key || '—')
+      : (getCatOptions(MOD.qb).find((x) => x.key === MOD.cat)?.label || MOD.cat);
+    const subLbl = usingLoadedSingle
+      ? (MOD.qbLoadedSingle?.unit?.label || MOD.qbLoadedSingle?.unit?.key || '—')
+      : (getSubOptions(MOD.qb, MOD.cat).find((x) => x.key === MOD.sub)?.label || MOD.sub);
+    const focusLbl = usingLoadedSingle
+      ? (MOD.qbLoadedSingle?.focus?.label || MOD.qbLoadedSingle?.focus?.key || '—')
+      : (getFocusOptions(MOD.qb, MOD.cat, MOD.sub).find((x) => x.key === MOD.focus)?.label || MOD.focus);
     qs('[data-qc-catlbl]', modal).textContent = String(catLbl);
     qs('[data-qc-sublbl]', modal).textContent = String(subLbl);
+    qs('[data-qc-focuslbl]', modal).textContent = String(focusLbl);
 
     const qEl = qs('[data-qc-q]', modal);
     const aEl = qs('[data-qc-a]', modal);
@@ -761,7 +938,9 @@
       if (aWrap) aWrap.style.display = 'none';
       if (tEl) tEl.textContent = '10.0s';
 
-      const q = pickRandomQuestion(MOD.qb, MOD.cat, MOD.sub, diff);
+      const q = usingLoadedSingle
+        ? pickRandomQuestionLoaded(MOD.qbLoadedSingle, diff)
+        : pickRandomQuestion(MOD.qb, MOD.cat, MOD.sub, MOD.focus, diff);
       if (!q) {
         qEl.textContent = 'No questions found for this selection.';
         aEl.textContent = '—';
@@ -814,8 +993,8 @@
         if (!MOD.qStarted) return;
         closeQuestionModal();
         MOD.turnState = 'awaitingPlacement';
-        MOD.placementsRemaining = 2;
-        setStatus(`Correct. ${MOD.currentStudent?.name || 'Student'} may now call 2 coordinates.`);
+        MOD.placementsRemaining = 3;
+        setStatus(`Correct. ${MOD.currentStudent?.name || 'Student'} may now call 3 coordinates.`);
         syncUi();
         return;
       }
@@ -923,9 +1102,7 @@
           (!teamKey && MOD.turnState === 'awaitingPlacement') ? 'is-armed' : ''
         ].filter(Boolean).join(' ');
 
-        html += `<button type="button" class="${cls}" data-qc-cell="${cell}" ${teamKey ? 'disabled' : ''}>${
-          teamKey ? '' : cell
-        }</button>`;
+        html += `<button type="button" class="${cls}" data-qc-cell="${cell}" ${teamKey ? 'disabled' : ''}></button>`;
 
       });
     });
@@ -958,9 +1135,17 @@
     const subOpts = getSubOptions(MOD.qb, MOD.cat).map((opt) => (
       `<option value="${escapeHtml(opt.key)}"${opt.key === MOD.sub ? ' selected' : ''}>${escapeHtml(opt.label)}</option>`
     )).join('');
+    const focusOpts = getFocusOptions(MOD.qb, MOD.cat, MOD.sub).map((opt) => (
+      `<option value="${escapeHtml(opt.key)}"${opt.key === MOD.focus ? ' selected' : ''}>${escapeHtml(opt.label)}</option>`
+    )).join('');
 
     return `
       <div class="ce-qc-controls">
+        <label class="ce-qc-field">
+          <button type="button" class="ce-qc-btn" data-qc-load-qb>Load QB</button>
+          <button type="button" class="ce-qc-btn" data-qc-use-built-in>Use built-in</button>
+          <input type="file" data-qc-qbfile style="display:none" accept=".json,.js,.txt" />
+        </label>
         <label class="ce-qc-field">
           <span class="ce-qc-fieldlabel">Category</span>
           <select class="ce-qc-select" data-qc-cat>${catOpts}</select>
@@ -968,6 +1153,10 @@
         <label class="ce-qc-field">
           <span class="ce-qc-fieldlabel">Subcategory</span>
           <select class="ce-qc-select" data-qc-sub>${subOpts}</select>
+        </label>
+        <label class="ce-qc-field">
+          <span class="ce-qc-fieldlabel">Focus</span>
+          <select class="ce-qc-select" data-qc-focus>${focusOpts}</select>
         </label>
 
       </div>
@@ -981,7 +1170,11 @@
     MOD.elStatus = qs('[data-qc-status]', MOD.root);
     MOD.elCat = qs('[data-qc-cat]', MOD.root);
     MOD.elSub = qs('[data-qc-sub]', MOD.root);
+    MOD.elFocus = qs('[data-qc-focus]', MOD.root);
     MOD.elBtnSelect = qs('[data-qc-select-student]', MOD.root);
+    MOD.elBtnLoadQB = qs('[data-qc-load-qb]', MOD.root);
+    MOD.elBtnUseBuiltInQB = qs('[data-qc-use-built-in]', MOD.root);
+    MOD.elQbFile = qs('[data-qc-qbfile]', MOD.root);
 
     qsa('[data-qc-team-pill]', MOD.root).forEach((pill) => {
       pill.addEventListener('click', () => {
@@ -1003,10 +1196,87 @@
       });
     }
 
+    MOD.elBtnLoadQB?.addEventListener('click', () => {
+      MOD.elQbFile?.click();
+    });
+
+    MOD.elBtnUseBuiltInQB?.addEventListener('click', () => {
+      if (!MOD.qbBuiltIn) {
+        setStatus('No built-in question bank available.');
+        syncUi();
+        return;
+      }
+
+      MOD.qbLoadedSingle = null;
+      MOD.qbUploaded = null;
+      MOD.qbSource = 'builtin';
+      MOD.qb = MOD.qbBuiltIn;
+      loadQBSelection();
+
+      const cats = getCatOptions(MOD.qb);
+      if (!MOD.cat || !cats.find(c => c.key === MOD.cat)) {
+        MOD.cat = cats.find(c => c.key === 'quickmath')?.key || cats[0]?.key || '';
+      }
+
+      const subs = getSubOptions(MOD.qb, MOD.cat);
+      if (!MOD.sub || !subs.find(s => s.key === MOD.sub)) {
+        MOD.sub = subs[0]?.key || '';
+      }
+
+      const focuses = getFocusOptions(MOD.qb, MOD.cat, MOD.sub);
+      if (!MOD.focus || !focuses.find(f => f.key === MOD.focus)) {
+        MOD.focus = focuses[0]?.key || '';
+      }
+
+      setQBSelectorMode(false);
+      setStatus('Using built-in question bank.');
+      render();
+    });
+
+    MOD.elQbFile?.addEventListener('change', async () => {
+      const f = MOD.elQbFile.files?.[0];
+      MOD.elQbFile.value = '';
+      if (!f) return;
+
+      try {
+        const text = await f.text();
+        const qb = parseQBFileText(text);
+        if (!qb) {
+          setStatus('Load QB failed: could not parse file.');
+          return;
+        }
+
+        MOD.qbSource = 'uploaded';
+
+        if (isLoadedSingleQB(qb)) {
+          MOD.qbLoadedSingle = qb;
+          MOD.qbUploaded = null;
+          MOD.qb = MOD.qbBuiltIn;
+        } else {
+          MOD.qbLoadedSingle = null;
+          MOD.qbUploaded = qb;
+          MOD.qb = MOD.qbUploaded;
+
+          const cats = getCatOptions(MOD.qb);
+          MOD.cat = cats[0]?.key || '';
+          MOD.sub = getSubOptions(MOD.qb, MOD.cat)[0]?.key || '';
+          MOD.focus = getFocusOptions(MOD.qb, MOD.cat, MOD.sub)[0]?.key || '';
+        }
+
+        setQBSelectorMode(true);
+        setStatus('Loaded temporary question bank.');
+        render();
+      } catch {
+        setStatus('Load QB failed.');
+      }
+    });
+
     if (MOD.elCat) {
       MOD.elCat.addEventListener('change', () => {
         MOD.cat = String(MOD.elCat.value || '');
         MOD.sub = getSubOptions(MOD.qb, MOD.cat)[0]?.key || '';
+        MOD.focus = getFocusOptions(MOD.qb, MOD.cat, MOD.sub)[0]?.key || '';
+        saveQBSelection();
         render();
       });
     }
@@ -1014,6 +1284,16 @@
     if (MOD.elSub) {
       MOD.elSub.addEventListener('change', () => {
         MOD.sub = String(MOD.elSub.value || '');
+        MOD.focus = getFocusOptions(MOD.qb, MOD.cat, MOD.sub)[0]?.key || '';
+        saveQBSelection();
+        render();
+      });
+    }
+
+    if (MOD.elFocus) {
+      MOD.elFocus.addEventListener('change', () => {
+        MOD.focus = String(MOD.elFocus.value || '');
+        saveQBSelection();
         syncUi();
       });
     }
@@ -1024,9 +1304,8 @@
       });
     });
 
-
-
     updateTurnMeta();
+    setQBSelectorMode(MOD.qbSource === 'uploaded');
     syncUi();
   }
 
@@ -1074,6 +1353,24 @@
     }
   }  
 
+  function continuePendingHubExit() {
+    try { window.__CE_PHASE5?.exit?.(); } catch {}
+  }
+
+  function requestResultsBeforeUnmount() {
+    if (MOD._allowImmediateUnmount) {
+      MOD._allowImmediateUnmount = false;
+      return true;
+    }
+    if (!MOD.active) return true;
+    if (MOD._resultsShowing) return false;
+
+    MOD.turnState = 'resolved';
+    MOD._resultsShowing = true;
+    renderResultsModal();
+    return false;
+  }  
+
   function interceptPhaseGateExit() {
     const Ev = window.__CE_BOOT?.modules?.Events;
     if (!Ev || typeof Ev.on !== 'function') return;
@@ -1083,19 +1380,20 @@
       if (!MOD.active) return;
       if (id !== 'phaseGateExit') return;
 
-      // freeze gameplay
-      MOD.turnState = 'resolved';
-
-      // show Hex Flex results
-      renderResultsModal();
+      requestResultsBeforeUnmount();
     });
   }
 
   function renderResultsModal() {
     if (!MOD.root) return;
 
+    const existing = MOD.root.querySelector('[data-qc-results-modal]');
+    if (existing) existing.remove();
+
+
     const modal = document.createElement('div');
     modal.className = 'qc-modal';
+    modal.setAttribute('data-qc-results-modal', 'true');
 
     const rows = MOD.teamOrder.map(team => {
       const key = team.key;
@@ -1127,7 +1425,7 @@
         <div class="qc-modal-title">Hex Flex Results</div>
         ${rows}
         <div class="qc-footer">
-          <button class="ce-qc-btn" data-qc-award>🏆 Award Students</button>
+          <button class="ce-qc-btn" data-qc-award>🏆 Award & Close</button>
           <button class="ce-qc-btn" data-qc-close-results>Close</button>
         </div>
       </div>
@@ -1140,14 +1438,26 @@
 
     awardBtn?.addEventListener('click', () => {
       awardStudentsFromResults();
-      modal.remove();
+      MOD._resultsShowing = false;
+      MOD._allowImmediateUnmount = true;
+      const m = MOD.root?.querySelector('[data-qc-results-modal]');
+      if (m) m.remove();
+      continuePendingHubExit();
     });
 
     closeBtn?.addEventListener('click', () => {
-      modal.remove();
+      MOD._resultsShowing = false;
+      MOD._allowImmediateUnmount = true;
+      const m = MOD.root?.querySelector('[data-qc-results-modal]');
+      if (m) m.remove();
+      continuePendingHubExit();
     });
   }  
 
+  function beforeUnmount() {
+    return requestResultsBeforeUnmount();
+  }
+  
   function hardReset() {
     // state to be added in next diff
     closeQuestionModal();
@@ -1174,9 +1484,13 @@
     MOD.board = new Map();
     MOD.riskBoostByTeam = new Map();
     MOD.qbBuiltIn = null;
+    MOD.qbUploaded = null;
+    MOD.qbLoadedSingle = null;
+    MOD.qbSource = 'builtin';
     MOD.qb = null;
     MOD.cat = '';
     MOD.sub = '';
+    MOD.focus = '';
     MOD.modalEl = null;
     MOD.modalKeyHandler = null;
     MOD.qStarted = false;
@@ -1190,13 +1504,21 @@
     MOD.elStatus = null;
     MOD.elCat = null;
     MOD.elSub = null;
+    MOD.elFocus = null;
     MOD.elBtnSelect = null;
+    MOD.elBtnLoadQB = null;
+    MOD.elBtnUseBuiltInQB = null;
+    MOD.elQbFile = null;
+    MOD._resultsShowing = false;
+    MOD._allowImmediateUnmount = false;
   }
 
   function mountInto(hostEl) {
     if (!hostEl || MOD.active) return false;
     MOD.active = true;
     MOD.host = hostEl;
+
+    hostEl.innerHTML = '';
 
     ensureStyles();
     assignTeams();
@@ -1229,7 +1551,7 @@
   function registerWithHub() {
     const hub = window.__CE_PHASE5;
     if (!hub || typeof hub.register !== 'function') return false;
-    hub.register({ id: 'hexflex', label: 'Hex Flex', mount: mountInto, unmount });
+    hub.register({ id: 'hexflex', label: 'Hex Flex', mount: mountInto, unmount, beforeUnmount });
     window.__CE_HEXFLEX = Object.assign({}, window.__CE_HEXFLEX, { mountInto, unmount });
     return true;
   }

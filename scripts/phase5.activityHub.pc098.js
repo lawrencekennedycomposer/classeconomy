@@ -35,8 +35,7 @@
 
   // Preferred button order (left-to-right) in the Phase 5 topbar.
   // Activities not listed here will appear after these, in registry insertion order.
-  const PREFERRED_ORDER = ['bingo', 'pickbrick', 'quadconnect', 'hexflex'];
-
+  const PREFERRED_ORDER = ['bingo', 'pickbrick', 'quadconnect', 'hexflex', 'digdirt'];
 
   // -----------------------
   // Helpers
@@ -156,12 +155,13 @@
       btn.type = 'button';
       btn.className = 'ce-p5hub-btn';
       btn.textContent = act.label || id;
-      btn.disabled = !enabled;
+      btn.disabled = !enabled || (!!HUB.activeId && HUB.activeId !== id);
 
       if (HUB.activeId === id) btn.classList.add('is-active');
 
       btn.addEventListener('click', () => {
         if (!isPhase5(getPhaseNow())) return;
+        if (HUB.activeId && HUB.activeId !== id) return;
         switchTo(id);
       });
 
@@ -172,8 +172,8 @@
 
   function syncButtonsEnabled() {
     const enabled = isPhase5(HUB.currentPhase);
-    for (const btn of HUB.buttons.values()) {
-      btn.disabled = !enabled;
+  for (const [id, btn] of HUB.buttons.entries()) {
+    btn.disabled = !enabled || (!!HUB.activeId && HUB.activeId !== id);
     }
   }
 
@@ -182,6 +182,7 @@
       if (bid === id) btn.classList.add('is-active');
       else btn.classList.remove('is-active');
     }
+  syncButtonsEnabled();
   }
 
   // -----------------------
@@ -192,6 +193,10 @@
     if (!id) return;
 
     const act = HUB.activities.get(id);
+    try {
+      const allow = act?.beforeUnmount?.();
+      if (allow === false) return;
+    } catch {}
     try { act?.unmount?.(); } catch {}
 
     HUB.activeId = null;
@@ -258,7 +263,8 @@
       id,
       label: String(activity.label || id),
       mount: activity.mount,
-      unmount: activity.unmount
+      unmount: activity.unmount,
+      beforeUnmount: activity.beforeUnmount
     });
 
     // If hub UI is mounted, update buttons

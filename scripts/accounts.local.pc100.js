@@ -6,14 +6,14 @@
 ========================================================= */
 
 export const ACCOUNTS_LOCAL_V1 = Object.freeze([
-  { id: 'u1',  username: 'alpha',   password: 'test123' },
-  { id: 'u2',  username: 'bravo',   password: 'test123' },
-  { id: 'u3',  username: 'charlie', password: 'test123' },
-  { id: 'u4',  username: 'delta',   password: 'test123' },
-  { id: 'u5',  username: 'echo',    password: 'test123' },
-  { id: 'u6',  username: 'foxtrot', password: 'test123' },
-  { id: 'u7',  username: 'golf',    password: 'test123' },
-  { id: 'u8',  username: 'hotel',   password: 'test123' },
+  { id: 'u1',  username: 'L Kennedy',   password: 'Lawrence' },
+  { id: 'u2',  username: 'T Forsyth',   password: 'Tam' },
+  { id: 'u3',  username: 'P Austin', password: 'Pete' },
+  { id: 'u4',  username: 'R Boland',   password: 'Roberto' },
+  { id: 'u5',  username: 'J Caught',    password: 'Jason' },
+  { id: 'u6',  username: 'J Giles', password: 'Jo' },
+  { id: 'u7',  username: 'A Broadley',    password: 'Andrew' },
+  { id: 'u8',  username: 'S Hawkins',   password: 'Stephen' },
   { id: 'u9',  username: 'india',   password: 'test123' },
   { id: 'u10', username: 'juliet',  password: 'test123' },
 ]);

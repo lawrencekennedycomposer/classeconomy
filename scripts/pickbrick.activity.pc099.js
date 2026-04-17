@@ -45,10 +45,12 @@
     // question bank
     qbBuiltIn: null,
     qbUploaded: null,
+    qbLoadedSingle: null,
     qbSource: 'builtin', // builtin | uploaded
     qb: null,
     cat: null,
     sub: null,
+    focus: null,
 
     // modal
     modalEl: null,
@@ -65,6 +67,7 @@
     elBrickGrid: null,
     elCat: null,
     elSub: null,
+    elFocus: null,
     elBtnSelect: null,
     elBtnQuestion: null,
     elBtnResetSelector: null,
@@ -90,6 +93,31 @@
   // -----------------------------
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+
+  const QB_STORAGE_KEY = 'ce.qb.lastSelection';
+
+  function saveQBSelection() {
+    if (MOD.qbSource !== 'builtin') return;
+    try {
+      localStorage.setItem(QB_STORAGE_KEY, JSON.stringify({
+        cat: MOD.cat,
+        sub: MOD.sub,
+        focus: MOD.focus
+      }));
+    } catch {}
+  }
+
+  function loadQBSelection() {
+    try {
+      const raw = localStorage.getItem(QB_STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data?.cat) MOD.cat = String(data.cat);
+      if (data?.sub) MOD.sub = String(data.sub);
+      if (data?.focus) MOD.focus = String(data.focus);
+    } catch {}
+  }
 
   function computeBottomOverlayOverlap(hostEl) {
     if (!hostEl?.getBoundingClientRect) return 0;
@@ -505,7 +533,12 @@
   // -----------------------------
   function getCatOptions(qb) {
     if (!qb || typeof qb !== 'object') return [];
-    return Object.keys(qb).map(k => ({ key: k, label: String(qb[k]?.label || k) }));
+    const ORDER = ['quickmath', 'support', 'year7', 'year8', 'year9', 'year10'];
+    const keys = [
+      ...ORDER.filter((k) => qb[k]),
+      ...Object.keys(qb).filter((k) => !ORDER.includes(k))
+    ];
+    return keys.map(k => ({ key: k, label: String(qb[k]?.label || k) }));
   }
 
   function getSubOptions(qb, catKey) {
@@ -514,10 +547,16 @@
     return Object.keys(subs).map(k => ({ key: k, label: String(subs[k]?.label || k) }));
   }
 
-  function pickRandomQuestion(qb, catKey, subKey, diff) {
+  function getFocusOptions(qb, catKey, subKey) {
+    const subs = qb?.[catKey]?.subs?.[subKey]?.subs;
+    if (!subs || typeof subs !== 'object') return [];
+    return Object.keys(subs).map(k => ({ key: k, label: String(subs[k]?.label || k) }));
+  }
+
+  function pickRandomQuestion(qb, catKey, subKey, focusKey, diff) {
     const d = Number(diff);
     const chosen = (d === 1 || d === 2 || d === 3) ? d : 1;
-    const arr = qb?.[catKey]?.subs?.[subKey]?.d?.[chosen];
+    const arr = qb?.[catKey]?.subs?.[subKey]?.subs?.[focusKey]?.d?.[chosen];
     if (!Array.isArray(arr) || !arr.length) return null;
     const q = arr[Math.floor(Math.random() * arr.length)];
     if (!q) return null;
@@ -525,13 +564,46 @@
   }
 
   function normalizeUploadedQB(raw) {
-    // Accept either {STW_QB: {...}} or {...}
-    const qb = raw?.STW_QB && typeof raw.STW_QB === 'object' ? raw.STW_QB : raw;
-    if (!qb || typeof qb !== 'object') return null;
-    // minimal sanity check
-    const keys = Object.keys(qb);
-    if (!keys.length) return null;
-    return qb;
+    const obj = raw && typeof raw === 'object' ? raw : null;
+    if (!obj) return null;
+
+    if (obj.default && typeof obj.default === 'object') {
+      return normalizeUploadedQB(obj.default);
+    }
+    if (obj.__QB_DEFAULT__ && typeof obj.__QB_DEFAULT__ === 'object') {
+      return normalizeUploadedQB(obj.__QB_DEFAULT__);
+    }
+
+    const ensureD = (d) => ({
+      1: Array.isArray(d?.[1]) ? d[1] : [],
+      2: Array.isArray(d?.[2]) ? d[2] : [],
+      3: Array.isArray(d?.[3]) ? d[3] : []
+    });
+
+    if (obj.STW_QB && typeof obj.STW_QB === 'object' && Object.keys(obj.STW_QB).length) {
+      return obj.STW_QB;
+    }
+
+    if (obj?.stage?.key && obj?.unit?.key && obj?.focus?.key) {
+      return {
+        stage: {
+          key: String(obj.stage.key),
+          label: String(obj.stage.label || obj.stage.key)
+        },
+        unit: {
+          key: String(obj.unit.key),
+          label: String(obj.unit.label || obj.unit.key)
+        },
+        focus: {
+          key: String(obj.focus.key),
+          label: String(obj.focus.label || obj.focus.key)
+        },
+        d: ensureD(obj.d)
+      };
+    }
+
+    if (Object.keys(obj).length) return obj;
+    return null;
   }
 
   function parseQBFileText(text) {
@@ -551,12 +623,23 @@
       code = code.replace(/\bexport\s+const\s+/g, 'const ');
       code = code.replace(/\bexport\s+let\s+/g, 'let ');
       code = code.replace(/\bexport\s+var\s+/g, 'var ');
-      code = code.replace(/\bexport\s+default\s+/g, '');
+      code = code.replace(/\bexport\s+default\s+/g, 'const __QB_DEFAULT__ = ');
       // If file uses "export { STW_QB }" at end
       code = code.replace(/\bexport\s*\{[^}]*\}\s*;?/g, '');
 
-      const fn = new Function(`${code}\n; return (typeof STW_QB !== 'undefined') ? STW_QB : (typeof exports !== 'undefined' ? (exports.STW_QB||exports.default) : null);`);
-      const out = fn();
+      const fn = new Function(
+        'exports',
+        `let STW_QB;
+         ${code}
+         return (typeof __QB_DEFAULT__ !== 'undefined'
+           ? __QB_DEFAULT__
+           : (typeof STW_QB !== 'undefined' && STW_QB
+               ? STW_QB
+               : (typeof exports !== 'undefined' ? (exports.STW_QB || exports.default) : null)
+             )
+         );`
+      );
+      const out = fn({});
       const qb = normalizeUploadedQB(out);
       if (qb) return qb;
     } catch {}
@@ -580,6 +663,30 @@
       if (qb) return qb;
     }
     return null;
+  }
+
+
+  function isLoadedSingleQB(obj) {
+    return !!(obj?.stage?.key && obj?.unit?.key && obj?.focus?.key && obj?.d);
+  }
+
+  function pickRandomQuestionLoaded(singleQb, diff) {
+    const d = Number(diff);
+    const chosen = (d === 1 || d === 2 || d === 3) ? d : 1;
+    const arr = singleQb?.d?.[chosen] || singleQb?.d?.[String(chosen)] || [];
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const q = arr[Math.floor(Math.random() * arr.length)];
+    if (!q) return null;
+    return { q: String(q.q ?? q.question ?? '—'), a: String(q.a ?? q.answer ?? '—') };
+  }
+
+  function setQBSelectorMode(loadedMode) {
+    const sels = [MOD.elCat, MOD.elSub, MOD.elFocus].filter(Boolean);
+    for (const el of sels) {
+      el.disabled = !!loadedMode;
+      el.style.opacity = loadedMode ? '0.55' : '';
+      el.style.pointerEvents = loadedMode ? 'none' : '';
+    }
   }
 
   // -----------------------------
@@ -747,7 +854,7 @@
             <div class="ce-card" style="padding:10px;">
               <div class="ce-title" style="margin-bottom:8px;">Question bank</div>
               <div class="ce-row" style="margin-bottom:8px;">
-                <button class="ce-btn ce-grow" data-pb-uploadQB>Upload QB (replace)</button>
+                <button class="ce-btn ce-grow" data-pb-uploadQB>Load QB</button>
                 <button class="ce-btn" data-pb-useBuiltInQB>Use built-in</button>
                 <input type="file" data-pb-qbfile style="display:none" accept=".json,.js,.txt" />
               </div>
@@ -755,6 +862,8 @@
               <select class="ce-select" data-pb-cat></select>
               <div class="ce-muted" style="margin:10px 0 8px;">Subcategory</div>
               <select class="ce-select" data-pb-sub></select>
+              <div class="ce-muted" style="margin:10px 0 8px;">Focus</div>
+              <select class="ce-select" data-pb-focus></select>
 
             </div>
 
@@ -788,6 +897,7 @@
 
     MOD.elCat = qs('[data-pb-cat]', MOD.root);
     MOD.elSub = qs('[data-pb-sub]', MOD.root);
+    MOD.elFocus = qs('[data-pb-focus]', MOD.root);
 
     MOD.elBtnSelect = qs('[data-pb-select]', MOD.root);
     MOD.elBtnResetSelector = qs('[data-pb-resetSel]', MOD.root);
@@ -820,10 +930,19 @@
     MOD.elCat.addEventListener('change', () => {
       MOD.cat = MOD.elCat.value || null;
       rebuildSubOptions();
+      rebuildFocusOptions();
+      saveQBSelection();
       syncUI();
     });
     MOD.elSub.addEventListener('change', () => {
       MOD.sub = MOD.elSub.value || null;
+      rebuildFocusOptions();
+      saveQBSelection();
+      syncUI();
+    });
+    MOD.elFocus.addEventListener('change', () => {
+      MOD.focus = MOD.elFocus.value || null;
+      saveQBSelection();
       syncUI();
     });
 
@@ -836,13 +955,19 @@
         syncUI();
         return;
       }
+      MOD.qbLoadedSingle = null;
+      MOD.qbUploaded = null;
       MOD.qbSource = 'builtin';
       MOD.qb = MOD.qbBuiltIn;
+      loadQBSelection();
       const cats = getCatOptions(MOD.qb);
-      MOD.cat = cats[0]?.key || null;
-      MOD.sub = null;
+      if (!MOD.cat || !cats.some(c => c.key === MOD.cat)) {
+        MOD.cat = cats[0]?.key || null;
+      }
       rebuildCatOptions();
       rebuildSubOptions();
+      rebuildFocusOptions();
+      setQBSelectorMode(false);
       setStatus('Using built-in question bank.');
       syncUI();
     });
@@ -858,15 +983,28 @@
           setStatus('Upload failed: could not parse QB.');
           return;
         }
-        MOD.qbUploaded = qb;
         MOD.qbSource = 'uploaded';
-        MOD.qb = MOD.qbUploaded;
-        // reset selection to first items
-        const cats = getCatOptions(MOD.qb);
-        MOD.cat = cats[0]?.key || null;
-        rebuildCatOptions();
-        rebuildSubOptions();
-        setStatus('Question bank loaded (uploaded).');
+
+        if (isLoadedSingleQB(qb)) {
+          MOD.qbLoadedSingle = qb;
+          MOD.qbUploaded = null;
+          MOD.qb = MOD.qbBuiltIn;
+          setQBSelectorMode(true);
+          setStatus('Loaded temporary question bank.');
+        } else {
+          MOD.qbLoadedSingle = null;
+          MOD.qbUploaded = qb;
+          MOD.qb = MOD.qbUploaded;
+          const cats = getCatOptions(MOD.qb);
+          MOD.cat = cats[0]?.key || null;
+          MOD.sub = null;
+          MOD.focus = null;
+          rebuildCatOptions();
+          rebuildSubOptions();
+          rebuildFocusOptions();
+          setQBSelectorMode(true);
+          setStatus('Loaded temporary question bank.');
+        }
       } catch {
         setStatus('Upload failed.');
       }
@@ -943,6 +1081,17 @@
     else {
       MOD.sub = subs[0]?.key || null;
       if (MOD.sub) MOD.elSub.value = MOD.sub;
+    }
+  }
+
+  function rebuildFocusOptions() {
+    if (!MOD.elFocus) return;
+    const focuses = getFocusOptions(MOD.qb, MOD.cat, MOD.sub);
+    MOD.elFocus.innerHTML = focuses.map(f => `<option value="${escapeHtmlAttr(f.key)}">${escapeHtml(f.label)}</option>`).join('');
+    if (MOD.focus && focuses.some(f => f.key === MOD.focus)) MOD.elFocus.value = MOD.focus;
+    else {
+      MOD.focus = focuses[0]?.key || null;
+      if (MOD.focus) MOD.elFocus.value = MOD.focus;
     }
   }
 
@@ -1079,12 +1228,14 @@
 
   function openQuestionModal(student) {
     if (!MOD.root || !student) return;
-    if (!MOD.qb) {
+    if (MOD.qbSource === 'uploaded' && MOD.qbLoadedSingle) {
+      // loaded single-bank mode bypasses selectors entirely
+    } else if (!MOD.qb) {
       setStatus('Load a question bank first (Upload QB).');
       return;
     }
-    if (!MOD.cat || !MOD.sub) {
-      setStatus('Select a category + subcategory.');
+    if (MOD.qbSource !== 'uploaded' && (!MOD.cat || !MOD.sub || !MOD.focus)) {
+      setStatus('Select a category + subcategory + focus.');
       return;
     }
 
@@ -1104,7 +1255,7 @@
         </div>
 
         <div class="pb-row pb-mono" style="opacity:0.85;">
-          Category: <span data-pb-catlbl>—</span> &nbsp;•&nbsp; Sub: <span data-pb-sublbl>—</span>
+          Category: <span data-pb-catlbl>—</span> &nbsp;•&nbsp; Sub: <span data-pb-sublbl>—</span> &nbsp;•&nbsp; Focus: <span data-pb-focuslbl>—</span>
         </div>
 
         <div class="pb-row">
@@ -1143,10 +1294,18 @@
     MOD.modalEl = modal;
 
     // labels
-    const catLbl = getCatOptions(MOD.qb).find(x => x.key === MOD.cat)?.label || MOD.cat;
-    const subLbl = getSubOptions(MOD.qb, MOD.cat).find(x => x.key === MOD.sub)?.label || MOD.sub;
+    const catLbl = (MOD.qbSource === 'uploaded' && MOD.qbLoadedSingle)
+      ? (MOD.qbLoadedSingle?.stage?.label || MOD.qbLoadedSingle?.stage?.key || '—')
+      : (getCatOptions(MOD.qb).find(x => x.key === MOD.cat)?.label || MOD.cat);
+    const subLbl = (MOD.qbSource === 'uploaded' && MOD.qbLoadedSingle)
+      ? (MOD.qbLoadedSingle?.unit?.label || MOD.qbLoadedSingle?.unit?.key || '—')
+      : (getSubOptions(MOD.qb, MOD.cat).find(x => x.key === MOD.sub)?.label || MOD.sub);
+    const focusLbl = (MOD.qbSource === 'uploaded' && MOD.qbLoadedSingle)
+      ? (MOD.qbLoadedSingle?.focus?.label || MOD.qbLoadedSingle?.focus?.key || '—')
+      : (getFocusOptions(MOD.qb, MOD.cat, MOD.sub).find(x => x.key === MOD.focus)?.label || MOD.focus);
     qs('[data-pb-catlbl]', modal).textContent = String(catLbl);
     qs('[data-pb-sublbl]', modal).textContent = String(subLbl);
+    qs('[data-pb-focuslbl]', modal).textContent = String(focusLbl);
 
     const qWrap = qs('[data-pb-qwrap]', modal);
     const aWrap = qs('[data-pb-awrap]', modal);
@@ -1168,7 +1327,9 @@
       tWrap.classList.remove('pb-hidden');
       if (tEl) tEl.textContent = '10.0s';
 
-      const q = pickRandomQuestion(MOD.qb, MOD.cat, MOD.sub, diff);
+      const q = (MOD.qbSource === 'uploaded' && MOD.qbLoadedSingle)
+        ? pickRandomQuestionLoaded(MOD.qbLoadedSingle, diff)
+        : pickRandomQuestion(MOD.qb, MOD.cat, MOD.sub, MOD.focus, diff);
       if (!q) {
         qEl.textContent = 'No questions found for this selection.';
         aEl.textContent = '—';
@@ -1277,7 +1438,7 @@
     const hasStudent = !!MOD.current;
     const qbReady = !!MOD.qb;
 
-    if (MOD.elBtnQuestion) MOD.elBtnQuestion.disabled = !(hasStudent && qbReady && MOD.cat && MOD.sub);
+    if (MOD.elBtnQuestion) MOD.elBtnQuestion.disabled = !(hasStudent && qbReady && MOD.cat && MOD.sub && MOD.focus);
     if (MOD.elBtnSelect) MOD.elBtnSelect.disabled = false;
     if (MOD.elBtnUseBuiltInQB) MOD.elBtnUseBuiltInQB.disabled = !MOD.qbBuiltIn || MOD.qbSource === 'builtin';
 
@@ -1296,6 +1457,7 @@
     // keep dropdown states
     if (MOD.elCat && MOD.cat) MOD.elCat.value = MOD.cat;
     if (MOD.elSub && MOD.sub) MOD.elSub.value = MOD.sub;
+    if (MOD.elFocus && MOD.focus) MOD.elFocus.value = MOD.focus;
   }
 
   // -----------------------------
@@ -1319,10 +1481,12 @@
 
     MOD.qbBuiltIn = null;
     MOD.qbUploaded = null;
+    MOD.qbLoadedSingle = null;
     MOD.qbSource = 'builtin';
     MOD.qb = null;
     MOD.cat = null;
     MOD.sub = null;
+    MOD.focus = null;
   }
 
   function mountInto(hostEl) {
@@ -1338,10 +1502,25 @@
     // Try auto-load QB if available, else teacher uploads
     MOD.qbBuiltIn = tryAutoLoadQB();
     MOD.qb = MOD.qbBuiltIn;
+    MOD.qbLoadedSingle = null;
     MOD.qbSource = MOD.qbBuiltIn ? 'builtin' : 'builtin';
     if (MOD.qb) {
+      loadQBSelection();
+
       const cats = getCatOptions(MOD.qb);
-      MOD.cat = cats[0]?.key || null;
+      if (!MOD.cat || !cats.find(c => c.key === MOD.cat)) {
+        MOD.cat = cats[0]?.key || null;
+      }
+
+      const subs = getSubOptions(MOD.qb, MOD.cat);
+      if (!MOD.sub || !subs.find(s => s.key === MOD.sub)) {
+        MOD.sub = subs[0]?.key || null;
+      }
+
+      const focuses = getFocusOptions(MOD.qb, MOD.cat, MOD.sub);
+      if (!MOD.focus || !focuses.find(f => f.key === MOD.focus)) {
+        MOD.focus = focuses[0]?.key || null;
+      }
     }
 
     buildUI();
@@ -1349,11 +1528,13 @@
     // populate selects
     rebuildCatOptions();
     rebuildSubOptions();
+    rebuildFocusOptions();
+    setQBSelectorMode(false);
 
     // init bricks
     resetBricks();
 
-    setStatus(MOD.qb ? 'Ready. Select student.' : 'Ready. Upload QB, then select student.');
+    setStatus(MOD.qb ? 'Ready. Select student.' : 'Ready. Load QB, then select student.');
     syncUI();
     return true;
   }

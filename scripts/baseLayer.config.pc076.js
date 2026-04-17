@@ -29,7 +29,9 @@ const BASE_BY_PHASE = Object.freeze({
   1: 'seating',  // Phase 1 base layer
   2: 'coinflip',  // [PC#083] Phase 2 base layer (coinflip shell)
   3: 'stw',
-  4: 'work' // [PC#095] Phase 4 base layer (Work)
+  4: 'work', // [PC#095] Phase 4 base layer (Work)
+  7: 'purchase' // [PC#105] Phase 7 base layer (Purchase)
+  
 });
 
   // shared helper (must NOT live inside onPhaseChange)
@@ -229,6 +231,23 @@ function resolveSeatingBaseLayer() {
         return;
       }
     }
+
+    // [PC#105] Phase 7 Purchase Base
+    if (key === 'purchase') {
+      if (window.__CE_PURCHASE_BASE?.mount) {
+        instance = window.__CE_PURCHASE_BASE.mount(baseHost);
+        if (instance?.el) {
+          currentBase = { el: instance.el, type: 'purchase-base' };
+          log(`base layer 'purchase' mounted via PC105`);
+          return;
+        }
+        log(`mountBase('purchase') failed — PC105 returned no el`);
+        return;
+      } else {
+        log(`mountBase('purchase') failed — PC105 not available`);
+        return;
+      }
+    }
   
     // DEV TEST BASE ONLY
     if (key === 'dev-test') {
@@ -301,6 +320,13 @@ function resolveSeatingBaseLayer() {
         const WORK = window.__CE_WORK_BASE;
         if (WORK && typeof WORK.unmount === 'function') {
           WORK.unmount();
+        }
+      }
+
+      if (currentBase.type === 'purchase-base') {
+        const PURCHASE = window.__CE_PURCHASE_BASE;
+        if (PURCHASE && typeof PURCHASE.unmount === 'function') {
+          PURCHASE.unmount();
         }
       }
 

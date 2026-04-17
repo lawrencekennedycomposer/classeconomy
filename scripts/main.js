@@ -127,6 +127,37 @@ try {
   import('./coinflip.base.pc083.js').catch(() => {});
   import('./stw.base.pc090.js').catch(() => {});
   import('./work.base.pc095.js').catch(() => {});
+  import('./challenge.base.pc108.js').catch(() => {});
+  import('./challenge.overlay.pc109.js')
+    .then(() => { try { window.__CE_CHALLENGE_OVERLAY?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.input.pc110.js')
+    .then(() => { try { window.__CE_CHALLENGE_INPUT?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.commit.pc111.js')
+    .then(() => { try { window.__CE_CHALLENGE_COMMIT?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.wheel.pc112.js')
+    .then(() => { try { window.__CE_CHALLENGE_WHEEL?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.nomination.pc113.js')
+    .then(() => { try { window.__CE_CHALLENGE_NOMINATION?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.resolve.pc114.js')
+    .then(() => { try { window.__CE_CHALLENGE_RESOLVE?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.gamepadtest.pc123.js')
+    .then(() => { try { window.__CE_CHALLENGE_GAMEPADTEST?.mount?.(); } catch {} })
+    .catch(() => {});
+  import('./challenge.duel.targettap.pc115.js').catch(() => {});
+  import('./challenge.duel.picklepong.pc116.js').catch(() => {});
+  import('./challenge.duel.wizardduel.pc117.js').catch(() => {});
+  import('./challenge.duel.neontrails.pc118.js').catch(() => {});
+  import('./challenge.duel.rhythmstrike.pc119.js').catch(() => {});
+  import('./input.gamepad.pc122.js').catch(() => {});
+  // PC#122 gamepad input layer supports pad index assignment for duel modules
+  import('./purchase.base.pc105.js').catch(() => {}); 
+  import('./purchase.listings.pc106.js').catch(() => {}); 
   import('./baseLayer.config.pc076.js').catch(() => {});
 } catch { /* no-op */ }
 
@@ -146,9 +177,9 @@ try {
   // Phase 5 container / selector
   import('./phase5.activityHub.pc098.js').catch(() => {});
 
-  // Make STW question bank available globally for Phase 5 activities (Pick the Brick auto-load)
-  import('./stw.questionbank.pc091.js')
-    .then((m) => { if (m?.STW_QB) window.STW_QB = m.STW_QB; })
+  // PC#121 – Authoritative STW / Phase 5 QB index
+  import('./qb.index.pc121.js')
+    .then(() => console.log('[PC#121] QB Index loaded'))
     .catch(() => {});
 
 
@@ -156,7 +187,9 @@ try {
   import('./bingo.activity.pc097.js').catch(() => {});
   import('./pickbrick.activity.pc099.js').catch(() => {});
   import('./quadconnect.activity.pc102.js').catch(() => {});
-  import('./hexflex.activity.pc103.js').catch(() => {});
+  import('./hexflex.activity.pc103.js').catch(() => {}); 
+  import('./digdirt.activity.pc120.js').catch(() => {});
+
 
   // Future Phase 5 activities go here:
   // import('./phase5.someActivity.pc0xx.js').catch(() => {});

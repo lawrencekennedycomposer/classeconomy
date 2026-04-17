@@ -26,6 +26,20 @@ const E   = Bus.EVENTS_V3 || Bus.EVENTS_V2 || Bus.EVENTS || {};
 
 let _host = null;
 
+function getCurrentPhase() {
+  return String(
+    window.__CE_BOOT?.phaseGateState?.currentPhase ??
+    window.__CE_BOOT?.phase?.current ??
+    window.__CE_BOOT?.modules?.Dashboard?.session?.phase ??
+    window.__CE_BOOT?.CE?.modules?.Dashboard?.session?.phase ??
+    ''
+  );
+}
+
+function isPurchasePhase() {
+  return getCurrentPhase() === '7';
+}
+
 /* =========================================================
    STYLE
    - Uses CSS vars --lb-font / --lb-score-font on :root
@@ -105,6 +119,18 @@ function ensureStyle() {
       min-width: 2ch;
     }
 
+    #leaderboard .lb-banked {
+      flex: 0 0 auto;
+      margin-left: 8px;
+      font-weight: 900;
+      font-size: var(--lb-score-font, 16px);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+      text-align: center;
+      min-width: 2.5ch;
+      color: #ff79c6;
+    }
+
     /* Compact mode: two columns when >20 students */
     #leaderboard .lb.lb--compact .lb-list {
       grid-template-columns: 1fr 1fr;
@@ -157,12 +183,17 @@ function buildEntries() {
     const unbanked = Number.isFinite(scoreRec.unbanked)
       ? Number(scoreRec.unbanked)
       : 0;
+    const banked = Number.isFinite(scoreRec.banked)
+      ? Number(scoreRec.banked)
+      : 0;
+
 
     return {
       id,
       name: s.name,
       active: s.active,
-      score: unbanked
+      score: unbanked,
+      banked
     };
   });
 }
@@ -297,6 +328,7 @@ function render() {
   ensureStyle();
 
   const entries = buildEntries();
+  const purchasePhase = isPurchasePhase();
   const count   = entries.length;
   const compact = count > 20;
   // Compute Part A canonical display names
@@ -315,6 +347,9 @@ function render() {
     const li = document.createElement('li');
     li.className = 'lb-item';
     if (!entry.active) li.classList.add('is-inactive');
+    if (purchasePhase) li.classList.add('lb-item--purchase');
+    li.dataset.studentId = String(entry.id);
+    li.dataset.studentName = String(entry.name || '');
 
     // These attributes are what PC#062 expects to bind tiles
     li.dataset.studentId = entry.id;
@@ -328,12 +363,22 @@ function render() {
     const label = displayNameMap[entry.id] || entry.name.toUpperCase();
     nameSpan.textContent = label;
 
+    if (purchasePhase) {
+      const bankedSpan = document.createElement('span');
+      bankedSpan.className = 'lb-banked';
+      bankedSpan.textContent = String(entry.banked ?? 0);
+      li.appendChild(nameSpan);
+      li.appendChild(bankedSpan);
+    } else {
+      li.appendChild(nameSpan);
+    }
+
 
     const scoreSpan = document.createElement('span');
     scoreSpan.className = 'lb-score';
     scoreSpan.textContent = String(entry.score ?? 0);
 
-    li.appendChild(nameSpan);
+
     li.appendChild(scoreSpan);
     list.appendChild(li);
   });
@@ -354,12 +399,14 @@ function wireEvents() {
     const EVT_AWARD  = E.DASHBOARD_AWARD_APPLIED || 'dashboard:award:applied';
     const EVT_UNDO   = E.HISTORY_UNDO || 'history:undo';
     const EVT_REDO   = E.HISTORY_REDO || 'history:redo';
+    const EVT_PHASE  = E.LESSON_PHASE_CHANGE || E.LESSON_PHASE_CHANGED || 'lesson:phaseChange';
 
     on(EVT_SCORE,  render);
     on(EVT_ROSTER, render);
     on(EVT_AWARD,  render);
     on(EVT_UNDO,   render);
     on(EVT_REDO,   render);
+    on(EVT_PHASE,  render);
   } catch (e) {
     console.warn('[PC#051] Failed to wire events', e);
   }
