@@ -173,33 +173,33 @@ import substituteLinearY9 from './questionbanks/Year9/linear-relations/substitut
 import yInterceptBasicY9 from './questionbanks/Year9/linear-relations/y-intercept-basic.qb.js';
 
 // Year 10 — Trigonometry
-import trigFindAngleBasicY10 from './questionbanks/year10/trigonometry/trig-find-angle-basic.qb.js';
-import trigFindSideBasicY10 from './questionbanks/year10/trigonometry/trig-find-side-basic.qb.js';
-import trigMixedReviewY10 from './questionbanks/year10/trigonometry/trig-mixed-review.qb.js';
-import trigNamingSidesY10 from './questionbanks/year10/trigonometry/trig-naming-sides.qb.js';
-import trigRatiosBasicY10 from './questionbanks/year10/trigonometry/trig-ratios-basic.qb.js';
+import trigFindAngleBasicY10 from './questionbanks/Year10/trigonometry/trig-find-angle-basic.qb.js';
+import trigFindSideBasicY10 from './questionbanks/Year10/trigonometry/trig-find-side-basic.qb.js';
+import trigMixedReviewY10 from './questionbanks/Year10/trigonometry/trig-mixed-review.qb.js';
+import trigNamingSidesY10 from './questionbanks/Year10/trigonometry/trig-naming-sides.qb.js';
+import trigRatiosBasicY10 from './questionbanks/Year10/trigonometry/trig-ratios-basic.qb.js';
 
 // Year 10 — Statistics
-import dataTypeY10 from './questionbanks/year10/statistics/data-type.qb.js';
-import frequencyBasicY10 from './questionbanks/year10/statistics/frequency-basic.qb.js';
-import meanBasicY10 from './questionbanks/year10/statistics/mean-basic.qb.js';
-import medianBasicY10 from './questionbanks/year10/statistics/median-basic.qb.js';
-import modeBasicY10 from './questionbanks/year10/statistics/mode-basic.qb.js';
-import statsMixedReviewY10 from './questionbanks/year10/statistics/stats-mixed-review.qb.js';
+import dataTypeY10 from './questionbanks/Year10/statistics/data-type.qb.js';
+import frequencyBasicY10 from './questionbanks/Year10/statistics/frequency-basic.qb.js';
+import meanBasicY10 from './questionbanks/Year10/statistics/mean-basic.qb.js';
+import medianBasicY10 from './questionbanks/Year10/statistics/median-basic.qb.js';
+import modeBasicY10 from './questionbanks/Year10/statistics/mode-basic.qb.js';
+import statsMixedReviewY10 from './questionbanks/Year10/statistics/stats-mixed-review.qb.js';
 
 // Year 10 — Geometrical Figures
-import anglesAtAPointY10 from './questionbanks/year10/geometrical-figures/angles-at-a-point.qb.js';
-import anglesInQuadrilateralsY10 from './questionbanks/year10/geometrical-figures/angles-in-quadrilaterals.qb.js';
-import anglesInTrianglesY10 from './questionbanks/year10/geometrical-figures/angles-in-triangles.qb.js';
-import congruencyBasicsY10 from './questionbanks/year10/geometrical-figures/congruency-basics.qb.js';
-import geometricalFiguresMixedReviewY10 from './questionbanks/year10/geometrical-figures/geometrical-figures-mixed-review.qb.js';
-import parallelLinesY10 from './questionbanks/year10/geometrical-figures/parallel-lines.qb.js';
-import polygonInteriorAngleSumY10 from './questionbanks/year10/geometrical-figures/polygon-interior-angle-sum.qb.js';
-import regularPolygonExteriorAngleY10 from './questionbanks/year10/geometrical-figures/regular-polygon-exterior-angle.qb.js';
-import similarFiguresScaleFactorY10 from './questionbanks/year10/geometrical-figures/similar-figures-scale-factor.qb.js';
-import similarTrianglesBasicsY10 from './questionbanks/year10/geometrical-figures/similar-triangles-basics.qb.js';
-import supplementaryComplementaryY10 from './questionbanks/year10/geometrical-figures/supplementary-complementary.qb.js';
-import verticallyOppositeAnglesY10 from './questionbanks/year10/geometrical-figures/vertically-opposite-angles.qb.js';
+import anglesAtAPointY10 from './questionbanks/Year10/geometrical-figures/angles-at-a-point.qb.js';
+import anglesInQuadrilateralsY10 from './questionbanks/Year10/geometrical-figures/angles-in-quadrilaterals.qb.js';
+import anglesInTrianglesY10 from './questionbanks/Year10/geometrical-figures/angles-in-triangles.qb.js';
+import congruencyBasicsY10 from './questionbanks/Year10/geometrical-figures/congruency-basics.qb.js';
+import geometricalFiguresMixedReviewY10 from './questionbanks/Year10/geometrical-figures/geometrical-figures-mixed-review.qb.js';
+import parallelLinesY10 from './questionbanks/Year10/geometrical-figures/parallel-lines.qb.js';
+import polygonInteriorAngleSumY10 from './questionbanks/Year10/geometrical-figures/polygon-interior-angle-sum.qb.js';
+import regularPolygonExteriorAngleY10 from './questionbanks/Year10/geometrical-figures/regular-polygon-exterior-angle.qb.js';
+import similarFiguresScaleFactorY10 from './questionbanks/Year10/geometrical-figures/similar-figures-scale-factor.qb.js';
+import similarTrianglesBasicsY10 from './questionbanks/Year10/geometrical-figures/similar-triangles-basics.qb.js';
+import supplementaryComplementaryY10 from './questionbanks/Year10/geometrical-figures/supplementary-complementary.qb.js';
+import verticallyOppositeAnglesY10 from './questionbanks/Year10/geometrical-figures/vertically-opposite-angles.qb.js';
 
 const FILES = [
 
