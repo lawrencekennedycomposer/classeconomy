@@ -204,6 +204,13 @@
     interval.style.minWidth = '56px';
     interval.style.textAlign = 'center';
 
+    // Boost indicator
+    const boostEl = document.createElement('span');
+    boostEl.className = 'topbar-boost';
+    boostEl.style.minWidth = '70px';
+    boostEl.style.textAlign = 'center';
+    boostEl.style.fontWeight = '700';
+    boostEl.textContent = 'x1';
 
     // ALL button
     const btnAll = document.createElement('button');
@@ -224,6 +231,7 @@
     });
 
     wrap.appendChild(interval);
+    wrap.appendChild(boostEl);
     wrap.appendChild(btnAll);
 
     topbar.appendChild(wrap);
@@ -248,6 +256,7 @@
     WORK.elIntervalTimer = interval;
     WORK.elPhaseTimer = null; // keep phase timer ONLY in burnline bar
     WORK.btnAll = btnAll;
+    WORK.elBoost = boostEl;
   }
 
   function unmountTopbar() {
@@ -382,10 +391,16 @@
   // -------------------------------
   function mountBoostListener() {
     const Ev = getEventsBus();
+    const Dashboard = window.__CE_BOOT?.CE?.modules?.Dashboard || window.Dashboard || null;
     if (!Ev || typeof Ev.on !== 'function') return;
 
-    const handler = (payload = {}) => {
-      const b = Number(payload.boost);
+    try {
+      WORK.currentBoost = Number(Dashboard?.getLessonBoost?.() || 1);
+    } catch {
+      WORK.currentBoost = 1;
+    }
+    const handler = (e = {}) => {
+      const b = Number(e?.detail?.boost);
       if (b === 1 || b === 2 || b === 3) WORK.currentBoost = b;
     };
 
@@ -491,6 +506,24 @@
 
   function updateTimersUI() {
     const n = nowMs();
+
+    // Boost indicator
+    if (WORK.elBoost) {
+      const b = WORK.currentBoost || 1;
+      WORK.elBoost.textContent = b > 1 ? `x${b}` : '';
+
+      // upgraded visual cue
+      if (b === 2) {
+        WORK.elBoost.style.color = '#ffd166';
+        WORK.elBoost.style.textShadow = '0 0 6px rgba(255,209,102,0.6)';
+      } else if (b === 3) {
+        WORK.elBoost.style.color = '#ff7979';
+        WORK.elBoost.style.textShadow = '0 0 8px rgba(255,121,121,0.7)';
+      } else {
+        WORK.elBoost.style.color = 'transparent';
+        WORK.elBoost.style.textShadow = 'none';
+      }
+    }
 
     // Phase timer (topbar) must match burnline timer in advisory mode
     if (WORK.elPhaseTimer) {

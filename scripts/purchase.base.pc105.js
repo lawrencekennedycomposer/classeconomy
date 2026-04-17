@@ -99,6 +99,25 @@
       .ce-export-fab:hover{
         background:rgba(80,140,255,1);
       }
+      .ce-bank-fab{
+        position:absolute;
+        right:240px;
+        bottom:16px;
+        z-index:50;
+        pointer-events:auto;
+        padding:16px 22px;
+        font-size:16px;
+        font-weight:900;
+        border-radius:16px;
+        background:rgba(255,121,198,0.9);
+        color:#fff;
+        border:1px solid rgba(255,255,255,0.2);
+        box-shadow:0 12px 30px rgba(0,0,0,0.35);
+        cursor:pointer;
+      }
+      .ce-bank-fab:hover{
+        background:rgba(255,121,198,1);
+      }
       .ce-purchase-panel{
         pointer-events:auto;
         background:rgba(17,21,26,0.94);
@@ -796,9 +815,13 @@
       <button id="ce-export-fab" class="ce-export-fab">
         Export Lesson Data
       </button>
+      <button id="ce-bank-fab" class="ce-bank-fab">
+        Bank Unbanked Tokens
+      </button>
     `;
 
     const btnExportFab = qs('#ce-export-fab', PURCHASE.root);
+    const btnBankFab = qs('#ce-bank-fab', PURCHASE.root);
     const btnEditListings = qs('#ce-purchase-edit-listings', PURCHASE.root);
 
     if (btnExportFab) {
@@ -807,6 +830,11 @@
       };
     }
 
+    if (btnBankFab) {
+      btnBankFab.onclick = () => {
+        try { getBus()?.emit?.('bank:run', { source: 'pc105' }); } catch {}
+      };
+    }
 
     qsa('[data-purchase-item-id]', PURCHASE.root).forEach((row) => {
       row.addEventListener('click', () => {

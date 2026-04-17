@@ -58,6 +58,8 @@
     elFocus: null,
     elBtnSelect: null,
 
+    _qcExitHooked: false,
+    _phaseExitHandler: null,    
     _resultsShowing: false,
     _allowImmediateUnmount: false,
   };
@@ -1364,7 +1366,8 @@
       return true;
     }
     if (!MOD.active) return true;
-    if (MOD._resultsShowing) return false;
+    // If already showing results, allow unmount
+    if (MOD._resultsShowing) return true;
 
     MOD.turnState = 'resolved';
     MOD._resultsShowing = true;
@@ -1375,14 +1378,18 @@
   function interceptPhaseGateExit() {
     const Ev = window.__CE_BOOT?.modules?.Events;
     if (!Ev || typeof Ev.on !== 'function') return;
+    if (MOD._qcExitHooked) return;
 
-    Ev.on('ui:openWindow', (payload) => {
+    MOD._phaseExitHandler = (payload) => {
       const id = payload?.detail?.id ?? payload?.id ?? '';
       if (!MOD.active) return;
       if (id !== 'phaseGateExit') return;
 
       requestResultsBeforeUnmount();
-    });
+    };
+
+    Ev.on('ui:openWindow', MOD._phaseExitHandler);
+    MOD._qcExitHooked = true;
   }
 
   function renderResultsModal() {
@@ -1508,6 +1515,8 @@
     MOD.elBtnLoadQB = null;
     MOD.elBtnUseBuiltInQB = null;
     MOD.elQbFile = null;
+    MOD._qcExitHooked = false;
+    MOD._phaseExitHandler = null;
     MOD._resultsShowing = false;
     MOD._allowImmediateUnmount = false;
   }
@@ -1517,7 +1526,6 @@
     MOD.active = true;
     MOD.host = hostEl;
 
-    hostEl.innerHTML = '';
 
     ensureStyles();
     assignTeams();
@@ -1539,6 +1547,14 @@
 
   function unmount() {
     if (!MOD.active) return false;
+
+    const Ev = window.__CE_BOOT?.modules?.Events;
+    if (MOD._phaseExitHandler && typeof Ev?.off === 'function') {
+      try { Ev.off('ui:openWindow', MOD._phaseExitHandler); } catch {}
+    }
+    MOD._phaseExitHandler = null;
+    MOD._qcExitHooked = false;
+
     MOD.active = false;
     hardReset();
     try { MOD.root?.remove?.(); } catch {}

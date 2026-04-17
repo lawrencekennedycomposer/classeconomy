@@ -86,6 +86,7 @@ export const rosterReady = true;
 ========================================================= */
 
 const _scores = new Map();
+let _lessonBoost = 1;
 
 /** Ensure every roster student has a scores entry. */
 function _ensureScoresBootstrapped() {
@@ -109,6 +110,31 @@ export function getScoresSnapshot() {
     };
   }
   return Object.freeze({ byId });
+}
+
+export function getLessonBoost() {
+  return _lessonBoost;
+}
+
+export function setLessonBoost(value = 1) {
+  const n = Number(value);
+  const next = (n === 2 || n === 3) ? n : 1;
+  _lessonBoost = next;
+
+  try {
+    emit('lesson:boostChanged', {
+      ts: Date.now(),
+      boost: _lessonBoost,
+      source: 'dashboard'
+    });
+  } catch {}
+
+  return _lessonBoost;
+}
+
+export function cycleLessonBoost() {
+  const next = _lessonBoost >= 3 ? 1 : _lessonBoost + 1;
+  return setLessonBoost(next);
 }
 
 function _emitScoresUpdated() {
@@ -266,6 +292,38 @@ export function applyAward(payload = {}) {
   return true;
 }
 
+export function bankAllUnbankedTokens() {
+  _ensureScoresBootstrapped();
+
+  let moved = 0;
+
+  for (const [id, cur] of _scores.entries()) {
+    const unbanked = Math.max(0, Number(cur?.unbanked || 0));
+    const banked = Math.max(0, Number(cur?.banked || 0));
+
+    if (unbanked <= 0) continue;
+
+    _scores.set(String(id), {
+      unbanked: 0,
+      banked: banked + unbanked
+    });
+
+    moved += unbanked;
+  }
+
+  _emitScoresUpdated();
+
+  try {
+    emit('bank:completed', {
+      moved,
+      ts: Date.now()
+    });
+  } catch {}
+
+  return { ok: true, moved };
+}
+
+
 export const minimalAwardReady = true;
 
 /* =========================================================
@@ -277,6 +335,7 @@ export { getRosterSnapshot };
    PC#027 – Active Student Surface
 ========================================================= */
 let _activeStudent = { id: null, name: '' };
+  _lessonBoost = 1;
 
 export function setActiveStudent(id, name = '') {
   _activeStudent = { id: id || null, name: String(name || '') };
@@ -454,6 +513,10 @@ on(E.STW_AWARD || 'stw:award', (e) => {
   }
 });
 
+on('bank:run', () => {
+  bankAllUnbankedTokens();
+});
+
 /* =========================================================
    PC#029 – Open STW2 for Active Student
 ========================================================= */
@@ -554,8 +617,12 @@ window.Dashboard = {
   getRosterSnapshot,
   mountRoster,
   getScoresSnapshot,
+  getLessonBoost,
+  setLessonBoost,
+  cycleLessonBoost,
   __devBumpScore,
   applyAward,
+  bankAllUnbankedTokens,
   setActiveStudent,
   getActiveStudent,
   openSTWForActive,

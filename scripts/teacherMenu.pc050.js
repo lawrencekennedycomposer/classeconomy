@@ -16,9 +16,6 @@ import * as Events from './events.js';
 
 const MENU_ID = 'teacher-menu';
 
-// Simple in-memory engagement boost state (1–3).
-// If you want this persisted, we can later wire it to storage.js.
-let currentBoost = 1;
 
 // --------------------------------------------------------
 // Helpers
@@ -53,6 +50,9 @@ function getWindowRoot() {
 // --------------------------------------------------------
 
 function buildContent() {
+  const currentBoost =
+    window.__CE_BOOT?.CE?.modules?.Dashboard?.getLessonBoost?.() ?? 1;
+
   // Header + close button are provided by Canvas Host; we only render the body.
   return `
     <div class="tm-panel">
@@ -201,19 +201,16 @@ function openSeatingPlanPlaceholder() {
 
 function updateBoostLabel(button) {
   if (!button) return;
+  const currentBoost =
+    window.__CE_BOOT?.CE?.modules?.Dashboard?.getLessonBoost?.() ?? 1;
   button.textContent = `Engagement Boost: +${currentBoost}`;
 }
 
 function cycleBoost(Ev, button) {
-  currentBoost = currentBoost + 1;
-  if (currentBoost > 3) currentBoost = 1;
+  const Dashboard = window.__CE_BOOT?.CE?.modules?.Dashboard || null;
+  if (!Dashboard?.cycleLessonBoost) return;
+  Dashboard.cycleLessonBoost();
   updateBoostLabel(button);
-
-  Ev.emit('lesson:boostChanged', {
-    ts: Date.now(),
-    boost: currentBoost,
-    source: 'teacher-menu',
-  });
 }
 
 // --------------------------------------------------------

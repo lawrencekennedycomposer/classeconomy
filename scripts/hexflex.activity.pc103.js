@@ -1518,8 +1518,6 @@
     MOD.active = true;
     MOD.host = hostEl;
 
-    hostEl.innerHTML = '';
-
     ensureStyles();
     assignTeams();
     applyTeamMarkers();
