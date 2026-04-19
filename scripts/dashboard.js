@@ -87,6 +87,11 @@ export const rosterReady = true;
 
 const _scores = new Map();
 let _lessonBoost = 1;
+const _scoreUndoStack = [];
+const _scoreRedoStack = [];
+let _isRestoringScores = false;
+const _MAX_SCORE_HISTORY = 50;
+
 
 /** Ensure every roster student has a scores entry. */
 function _ensureScoresBootstrapped() {
@@ -114,6 +119,77 @@ export function getScoresSnapshot() {
 
 export function getLessonBoost() {
   return _lessonBoost;
+}
+
+function _cloneScoresSnapshot(snapshot = null) {
+  const src = snapshot?.byId && typeof snapshot.byId === 'object'
+    ? snapshot.byId
+    : getScoresSnapshot().byId;
+
+  return {
+    byId: JSON.parse(JSON.stringify(src || {}))
+  };
+}
+
+function _pushScoreUndoSnapshot() {
+  if (_isRestoringScores) return false;
+  _scoreUndoStack.push(_cloneScoresSnapshot());
+  if (_scoreUndoStack.length > _MAX_SCORE_HISTORY) {
+    _scoreUndoStack.shift();
+  }
+  _scoreRedoStack.length = 0;
+  return true;
+}
+
+function _restoreScoresSnapshot(snapshot) {
+  if (!snapshot?.byId || typeof snapshot.byId !== 'object') return false;
+
+  _isRestoringScores = true;
+  try {
+    _scores.clear();
+    _fromByIdObject(snapshot.byId);
+    _ensureScoresBootstrapped();
+    _emitScoresUpdated();
+    try { persistScores(); } catch {}
+    return true;
+  } finally {
+    _isRestoringScores = false;
+  }
+}
+
+export function setScoresFromSnapshot(snapshot) {
+  return _restoreScoresSnapshot(_cloneScoresSnapshot(snapshot));
+}
+
+export function undoScoreState() {
+  if (!_scoreUndoStack.length) return false;
+
+  const previous = _scoreUndoStack.pop();
+  _scoreRedoStack.push(_cloneScoresSnapshot());
+  if (_scoreRedoStack.length > _MAX_SCORE_HISTORY) {
+    _scoreRedoStack.shift();
+  }
+
+  return _restoreScoresSnapshot(previous);
+}
+
+export function redoScoreState() {
+  if (!_scoreRedoStack.length) return false;
+
+  const next = _scoreRedoStack.pop();
+  _scoreUndoStack.push(_cloneScoresSnapshot());
+  if (_scoreUndoStack.length > _MAX_SCORE_HISTORY) {
+    _scoreUndoStack.shift();
+  }
+
+  return _restoreScoresSnapshot(next);
+}
+
+export function getScoreHistoryState() {
+  return Object.freeze({
+    undoDepth: _scoreUndoStack.length,
+    redoDepth: _scoreRedoStack.length
+  });
 }
 
 export function setLessonBoost(value = 1) {
@@ -148,6 +224,7 @@ function _emitScoresUpdated() {
 export function __devBumpScore(studentId, delta = 1) {
   if (!studentId) return false;
   _ensureScoresBootstrapped();
+  _pushScoreUndoSnapshot();
 
   const id = String(studentId);
   const cur = _scores.get(id) || { unbanked: 0, banked: 0 };
@@ -261,6 +338,7 @@ export function applyAward(payload = {}) {
       : 1;
 
   _ensureScoresBootstrapped();
+  _pushScoreUndoSnapshot();
   const cur = _scores.get(id) || { unbanked: 0, banked: 0 };
 
   const baseUnbanked = Number(cur.unbanked || 0);
@@ -296,6 +374,7 @@ export function bankAllUnbankedTokens() {
   _ensureScoresBootstrapped();
 
   let moved = 0;
+  const before = _cloneScoresSnapshot();
 
   for (const [id, cur] of _scores.entries()) {
     const unbanked = Math.max(0, Number(cur?.unbanked || 0));
@@ -309,6 +388,14 @@ export function bankAllUnbankedTokens() {
     });
 
     moved += unbanked;
+  }
+
+  if (moved > 0 && !_isRestoringScores) {
+    _scoreUndoStack.push(before);
+    if (_scoreUndoStack.length > _MAX_SCORE_HISTORY) {
+      _scoreUndoStack.shift();
+    }
+    _scoreRedoStack.length = 0;
   }
 
   _emitScoresUpdated();
@@ -325,6 +412,88 @@ export function bankAllUnbankedTokens() {
 
 
 export const minimalAwardReady = true;
+
+function _getActiveUnbankedTotals() {
+  _ensureScoresBootstrapped();
+
+  const roster = getRosterSnapshot();
+  let moved = 0;
+  let affected = 0;
+
+  for (const s of roster.students || []) {
+    if (s?.active === false) continue;
+    const rec = _scores.get(String(s.id)) || { unbanked: 0, banked: 0 };
+    const unbanked = Math.max(0, Number(rec.unbanked || 0));
+    moved += unbanked;
+    if (unbanked > 0) affected += 1;
+  }
+
+  return { moved, affected };
+}
+
+function _closeBankConfirmModal() {
+  try { document.getElementById('ce-bank-confirm-backdrop')?.remove?.(); } catch {}
+}
+
+function _openBankConfirmModal(meta = {}) {
+  _closeBankConfirmModal();
+
+  const { moved, affected } = _getActiveUnbankedTotals();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'ce-bank-confirm-backdrop';
+  backdrop.style.position = 'fixed';
+  backdrop.style.inset = '0';
+  backdrop.style.zIndex = '9999';
+  backdrop.style.background = 'rgba(0,0,0,0.46)';
+  backdrop.style.display = 'flex';
+  backdrop.style.alignItems = 'center';
+  backdrop.style.justifyContent = 'center';
+
+  const modal = document.createElement('div');
+  modal.style.width = 'min(520px, calc(100vw - 48px))';
+  modal.style.background = '#11151a';
+  modal.style.color = '#e8eef2';
+  modal.style.border = '1px solid rgba(255,255,255,0.12)';
+  modal.style.borderRadius = '18px';
+  modal.style.boxShadow = '0 24px 60px rgba(0,0,0,0.35)';
+  modal.style.overflow = 'hidden';
+
+  modal.innerHTML = `
+    <div style="padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:18px;font-weight:900;">Confirm Banking</div>
+    </div>
+    <div style="padding:14px;">
+      <div style="font-size:16px; line-height:1.45;">
+        Are you sure you want to bank all current unbanked tokens?
+      </div>
+      <div style="margin-top:10px; font-size:13px; opacity:0.86;">
+        Total unbanked to move: <strong>${moved}</strong><br/>
+        Active students affected: <strong>${affected}</strong>
+      </div>
+    </div>
+    <div style="padding:12px 14px; border-top:1px solid rgba(255,255,255,0.08); display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" data-ce-bank="cancel" style="border:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.08); color:#fff; padding:10px 12px; border-radius:12px; font-weight:900; cursor:pointer;">Cancel</button>
+      <button type="button" data-ce-bank="confirm" ${moved > 0 ? '' : 'disabled'} style="border:1px solid rgba(80,140,255,0.42); background:rgba(80,140,255,0.32); color:#fff; padding:10px 12px; border-radius:12px; font-weight:900; cursor:pointer;">Bank Tokens</button>
+    </div>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  modal.querySelector('[data-ce-bank="cancel"]')?.addEventListener('click', () => {
+    _closeBankConfirmModal();
+  });
+
+  modal.querySelector('[data-ce-bank="confirm"]')?.addEventListener('click', () => {
+    bankAllUnbankedTokens();
+    _closeBankConfirmModal();
+  });
+
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) _closeBankConfirmModal();
+  });
+}
 
 /* =========================================================
    PC#018 – Re-export roster snapshot
@@ -513,8 +682,9 @@ on(E.STW_AWARD || 'stw:award', (e) => {
   }
 });
 
-on('bank:run', () => {
-  bankAllUnbankedTokens();
+on('bank:request', (e) => {
+  const p = e?.detail || {};
+  _openBankConfirmModal({ source: p.source || null });
 });
 
 /* =========================================================
@@ -543,6 +713,15 @@ on(E.STW_WINNER_SELECTED || 'stw:winnerSelected', async (e) => {
   }
 });
 
+
+on(E.HISTORY_UNDO || 'history:undo', () => {
+  undoScoreState();
+});
+
+on(E.HISTORY_REDO || 'history:redo', () => {
+  redoScoreState();
+});
+
 /* =========================================================
    PC#033 – Open STW2 for Random
 ========================================================= */
@@ -565,8 +744,8 @@ export function getLessonSnapshot() {
   let phase  = '1';
 
   try {
-    const ph = Storage.readJSON(Storage.KEYS.PHASE_V1, { current: '1' });
-    phase = String(ph?.current || '1');
+    const pg = window.__CE_BOOT?.phaseGateState;
+    phase = String(pg?.currentPhase ?? '1');
   } catch {}
 
   return Object.freeze({
@@ -623,6 +802,10 @@ window.Dashboard = {
   __devBumpScore,
   applyAward,
   bankAllUnbankedTokens,
+  setScoresFromSnapshot,
+  undoScoreState,
+  redoScoreState,
+  getScoreHistoryState,
   setActiveStudent,
   getActiveStudent,
   openSTWForActive,

@@ -705,6 +705,40 @@
     return true;
   }
 
+  function restoreStudentToOriginalSeat(studentId) {
+    const sid = String(studentId || '').trim();
+    if (!sid) return false;
+
+    const desks = getSeatLayout();
+    if (!desks.length) return false;
+
+    const currentDeskIdx = desks.findIndex((d) => String(d.defaultOccupantId || '') === sid);
+    if (currentDeskIdx < 0) return false;
+
+    const originalDesk = getOriginalDeskByOccupant(sid);
+    if (!originalDesk) return false;
+
+    const originalDeskId = String(originalDesk.id || '').trim();
+    if (!originalDeskId) return false;
+
+    const targetDeskIdx = desks.findIndex((d) => String(d.id || '') === originalDeskId);
+    if (targetDeskIdx < 0) return false;
+
+    // already back in original seat
+    if (currentDeskIdx === targetDeskIdx) return false;
+
+    const currentOcc = desks[currentDeskIdx].defaultOccupantId || '';
+    const targetOcc = desks[targetDeskIdx].defaultOccupantId || '';
+
+    // Move back if empty, otherwise swap with whoever is there
+    desks[targetDeskIdx].defaultOccupantId = currentOcc;
+    desks[currentDeskIdx].defaultOccupantId = targetOcc || '';
+
+    writeSeatLayout(desks);
+    render();
+    return true;
+  }
+
   function render() {
     if (!PURCHASE.root) return;
 
@@ -796,6 +830,14 @@
                 : `<div class="ce-selected-name">No student selected</div>`
             }
             <div class="ce-actions">
+              <button
+                type="button"
+                class="ce-btn"
+                data-ce-return-one="1"
+                ${selected && selectedMoved ? '' : 'disabled'}
+              >
+                Return to Original Seat
+              </button>
             </div>
             <div class="ce-hint">Select a leaderboard tile first. Phase 7 uses the selected tile student as the seat-swap subject.</div>
           </div>
@@ -832,7 +874,15 @@
 
     if (btnBankFab) {
       btnBankFab.onclick = () => {
-        try { getBus()?.emit?.('bank:run', { source: 'pc105' }); } catch {}
+        try { getBus()?.emit?.('bank:request', { source: 'pc105' }); } catch {}
+      };
+    }
+
+    const btnReturnOne = qs('[data-ce-return-one="1"]', PURCHASE.root);
+    if (btnReturnOne) {
+      btnReturnOne.onclick = () => {
+        if (!selected || !selectedMoved) return;
+        restoreStudentToOriginalSeat(selected.id);
       };
     }
 

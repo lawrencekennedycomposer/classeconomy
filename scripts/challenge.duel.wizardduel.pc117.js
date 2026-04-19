@@ -27,11 +27,15 @@
   const HALF = WIDTH / 2;
   const BUFFER = 34;
 
-  const ACCEL = 1.4;
+  const BASELINE_FPS = 31;
+  const SPEED_TUNE = 1.16;
+  const SPELL_TUNE = 1.22;
+  const PARTICLE_TUNE = 1.18;
+  const ACCEL = 1.4 * BASELINE_FPS * SPEED_TUNE;
   const FRICTION = 0.86;
-  const MAX_VX = 4.2 * (WIDTH / 960);
-  const MAX_VY = 5.0 * (HEIGHT / 474);
-  const SPELL_SPEED = 9.2 * (WIDTH / 960);
+  const MAX_VX = (4.2 * (WIDTH / 960)) * BASELINE_FPS * SPEED_TUNE;
+  const MAX_VY = (5.0 * (HEIGHT / 474)) * BASELINE_FPS * SPEED_TUNE;
+  const SPELL_SPEED = (9.2 * (WIDTH / 960)) * BASELINE_FPS * SPELL_TUNE;
   const RELOAD_MS = 320;
   const RICOCHET_MAX = 3;
 
@@ -95,10 +99,18 @@
     p2: null,
     particles: [],
     keys: new Set(),
+    gamepadMove: {
+      aVX: 0,
+      aVY: 0,
+      bVX: 0,
+      bVY: 0
+    },
     gamepadPrev: {
       aConfirm: false,
       bConfirm: false
     },
+    lastTickTs: 0,
+    dt: 0,
 
     scoreA: 0,
     scoreB: 0,
@@ -171,6 +183,10 @@
     MOD.particles = [];
     MOD.shake = 0;
     MOD.keys.clear();
+    MOD.gamepadMove.aVX = 0;
+    MOD.gamepadMove.aVY = 0;
+    MOD.gamepadMove.bVX = 0;
+    MOD.gamepadMove.bVY = 0;
   }
 
   function rr(ctx, x, y, w, h, r) {
@@ -225,45 +241,60 @@
   function updateControlTargets() {
     const keys = MOD.keys;
 
-    MOD.p1.wantVY =
+    const keyAVY =
       (keys.has('w') || keys.has('W') ? -MAX_VY : 0) +
       (keys.has('s') || keys.has('S') ? MAX_VY : 0);
 
-    MOD.p1.wantVX =
+    const keyAVX =
       (keys.has('a') || keys.has('A') ? -MAX_VX : 0) +
       (keys.has('d') || keys.has('D') ? MAX_VX : 0);
 
-    MOD.p2.wantVY =
+    const keyBVY =
       (keys.has('ArrowUp') ? -MAX_VY : 0) +
       (keys.has('ArrowDown') ? MAX_VY : 0);
 
-    MOD.p2.wantVX =
+    const keyBVX =
       (keys.has('ArrowLeft') ? -MAX_VX : 0) +
       (keys.has('ArrowRight') ? MAX_VX : 0);
+
+    MOD.p1.wantVX = keyAVX + MOD.gamepadMove.aVX;
+    MOD.p1.wantVY = keyAVY + MOD.gamepadMove.aVY;
+    MOD.p2.wantVX = keyBVX + MOD.gamepadMove.bVX;
+    MOD.p2.wantVY = keyBVY + MOD.gamepadMove.bVY;
+
   }
 
   function applyGamepadInput() {
     const input = window.CE_INPUT;
-    if (!input?.getPlayerState) return;
+    if (!input?.getPlayerState) {
+      MOD.gamepadMove.aVX = 0;
+      MOD.gamepadMove.aVY = 0;
+      MOD.gamepadMove.bVX = 0;
+      MOD.gamepadMove.bVY = 0;
+      updateControlTargets();
+      return;
+    }
 
     const padA = input.getPlayerState('a');
     const padB = input.getPlayerState('b');
 
-    MOD.p1.wantVY =
+    MOD.gamepadMove.aVY =
       (padA.up ? -MAX_VY : 0) +
       (padA.down ? MAX_VY : 0);
 
-    MOD.p1.wantVX =
+    MOD.gamepadMove.aVX =
       (padA.left ? -MAX_VX : 0) +
       (padA.right ? MAX_VX : 0);
 
-    MOD.p2.wantVY =
+    MOD.gamepadMove.bVY =
       (padB.up ? -MAX_VY : 0) +
       (padB.down ? MAX_VY : 0);
 
-    MOD.p2.wantVX =
+    MOD.gamepadMove.bVX =
       (padB.left ? -MAX_VX : 0) +
       (padB.right ? MAX_VX : 0);
+
+    updateControlTargets();
 
     const aConfirm = !!padA.lane3; // R1
     const bConfirm = !!padB.lane3; // R1
@@ -281,7 +312,7 @@
   }
 
   function drawWizard(ctx, wiz, hue) {
-    wiz.bob += 0.08;
+    wiz.bob += 0.08 * BASELINE_FPS * MOD.dt;
     const bobY = Math.sin(wiz.bob) * 1.2;
 
     ctx.fillStyle = 'rgba(15,23,42,0.9)';
@@ -378,9 +409,9 @@
   function drawParticles(ctx) {
     for (let i = MOD.particles.length - 1; i >= 0; i--) {
       const p = MOD.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life--;
+      p.x += p.vx * MOD.dt * BASELINE_FPS * PARTICLE_TUNE;
+      p.y += p.vy * MOD.dt * BASELINE_FPS * PARTICLE_TUNE;
+      p.life -= MOD.dt * BASELINE_FPS * PARTICLE_TUNE;
 
       const a = Math.max(0, p.life / p.max);
 
@@ -418,18 +449,16 @@
     ctx.fill();
     ctx.restore();
 
-    if (Math.random() < 0.8) {
-      addParticle(
-        s.x - s.dx * 0.8,
-        s.y - s.dy * 0.8,
-        -s.dx * 0.08 + (Math.random() - 0.5) * 0.6,
-        -s.dy * 0.08 + (Math.random() - 0.5) * 0.6,
-        18,
-        3,
-        glow,
-        true
-      );
-    }
+    addParticle(
+      s.x - s.dx * 0.2,
+      s.y - s.dy * 0.2,
+      -s.dx * 0.08 + (Math.random() - 0.5) * 0.6,
+      -s.dy * 0.08 + (Math.random() - 0.5) * 0.6,
+      18,
+      3,
+      glow,
+      true
+    );
   }
 
   function scorePoint(player, victim) {
@@ -463,29 +492,31 @@
   }
 
   function updateWizard(wiz, isP1) {
-    wiz.vx = clamp(wiz.vx + (wiz.wantVX - wiz.vx) * ACCEL * 0.1, -MAX_VX, MAX_VX);
-    wiz.vy = clamp(wiz.vy + (wiz.wantVY - wiz.vy) * ACCEL * 0.1, -MAX_VY, MAX_VY);
+    const blend = clamp(ACCEL * 0.1 * MOD.dt, 0, 1);
+    wiz.vx = clamp(wiz.vx + (wiz.wantVX - wiz.vx) * blend, -MAX_VX, MAX_VX);
+    wiz.vy = clamp(wiz.vy + (wiz.wantVY - wiz.vy) * blend, -MAX_VY, MAX_VY);
 
-    if (wiz.wantVX === 0) wiz.vx *= FRICTION;
-    if (wiz.wantVY === 0) wiz.vy *= FRICTION;
+    const frictionPow = Math.pow(FRICTION, MOD.dt * BASELINE_FPS);
+    if (wiz.wantVX === 0) wiz.vx *= frictionPow;
+    if (wiz.wantVY === 0) wiz.vy *= frictionPow;
 
-    wiz.x += wiz.vx;
-    wiz.y += wiz.vy;
+    wiz.x += wiz.vx * MOD.dt;
+    wiz.y += wiz.vy * MOD.dt;
 
     if (isP1) wiz.x = clamp(wiz.x, 20, HALF - BUFFER - WIZ_W);
     else wiz.x = clamp(wiz.x, HALF + BUFFER, WIDTH - 20 - WIZ_W);
 
     wiz.y = clamp(wiz.y, 56, HEIGHT - WIZ_H - 18);
 
-    wiz.castGlow = Math.max(0, wiz.castGlow - 0.05);
-    wiz.hitFlash = Math.max(0, wiz.hitFlash - 0.06);
+    wiz.castGlow = Math.max(0, wiz.castGlow - 0.05 * BASELINE_FPS * MOD.dt);
+    wiz.hitFlash = Math.max(0, wiz.hitFlash - 0.06 * BASELINE_FPS * MOD.dt);
   }
 
   function stepSpell(s, owner) {
     if (!s) return null;
 
-    s.x += s.dx;
-    s.y += s.dy;
+    s.x += s.dx * MOD.dt;
+    s.y += s.dy * MOD.dt;
 
     if (s.y < 8) {
       s.y = 8;
@@ -584,7 +615,7 @@
     updateWizard(MOD.p2, false);
     MOD.p1.spell = stepSpell(MOD.p1.spell, 1);
     MOD.p2.spell = stepSpell(MOD.p2.spell, 2);
-    MOD.shake *= MOD.shakeDecay;
+    MOD.shake *= Math.pow(MOD.shakeDecay, MOD.dt * BASELINE_FPS);
   }
 
   function drawBackground(ctx) {
@@ -735,6 +766,12 @@
   function tick(ts) {
     if (!MOD.mounted) return;
 
+    if (!MOD.lastTickTs) MOD.lastTickTs = ts;
+    let dt = (ts - MOD.lastTickTs) / 1000;
+    MOD.lastTickTs = ts;
+    if (dt > 0.05) dt = 0.05;
+    MOD.dt = dt;
+
     applyGamepadInput();
 
     if (MOD.phase === 'countdown') {
@@ -820,11 +857,14 @@
     resetState();
     MOD.gamepadPrev.aConfirm = false;
     MOD.gamepadPrev.bConfirm = false;
+    MOD.lastTickTs = 0;
+    MOD.dt = 0;
     bindInputs();
     try { window.CE_INPUT?.start?.(); } catch {}
 
     MOD.phase = 'countdown';
     MOD.countdownUntil = now() + COUNTDOWN_MS;
+    MOD.matchEndsAt = MOD.countdownUntil + ROUND_MS;
     drawFrame(now());
 
     MOD.frameId = requestAnimationFrame(tick);
@@ -842,8 +882,14 @@
     MOD.keyupHandler = null;
 
     MOD.keys.clear();
+    MOD.gamepadMove.aVX = 0;
+    MOD.gamepadMove.aVY = 0;
+    MOD.gamepadMove.bVX = 0;
+    MOD.gamepadMove.bVY = 0;
     MOD.gamepadPrev.aConfirm = false;
     MOD.gamepadPrev.bConfirm = false;
+    MOD.lastTickTs = 0;
+    MOD.dt = 0;
     MOD.mounted = false;
     MOD.phase = 'idle';
     MOD.host = null;

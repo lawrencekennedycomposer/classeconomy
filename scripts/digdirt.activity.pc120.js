@@ -393,13 +393,16 @@
     s.id = 'ce-digdirt-styles';
     s.textContent = `
       #ce-digdirt-root .ce-dd-root{
-        position:absolute; inset:0;
+        position:absolute;
+        top:0;
+        right:0;
+        left:0;
+        bottom:0;
         padding:12px;
         display:flex;
         flex-direction:column;
         gap:12px;
         font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-        height:100%;
         min-height:0;
         box-sizing:border-box;
         overflow:hidden;        
@@ -610,6 +613,7 @@
         min-height:0;
         display:flex;
         flex-direction:column;
+        overflow:hidden;
       }
       #ce-digdirt-root .ce-dd-stats{
         display:flex;
@@ -642,7 +646,7 @@
         display:grid;
         gap:10px;
         padding:6px;
-        overflow:hidden;
+        overflow:auto;
         grid-template-columns:repeat(var(--dd-cols, 6), var(--dd-cell, 96px));
         grid-template-rows:repeat(var(--dd-rows, 6), var(--dd-cell, 96px));
         justify-content:center;
@@ -799,7 +803,14 @@
   function applySafeBottom() {
     if (!MOD.host || !MOD.root) return;
     const SAFE_BOTTOM = 110;
-    MOD.root.style.paddingBottom = `${SAFE_BOTTOM}px`;
+    const inner = qs('.ce-dd-root', MOD.root);
+    if (!inner) return;
+    inner.style.bottom = `${SAFE_BOTTOM}px`;
+  }
+
+  function fitBoardToCanvas() {
+    applySafeBottom();
+    layoutTileGrid();
   }
 
   function layoutTileGrid() {
@@ -820,10 +831,25 @@
   for (let rows = minRows; rows <= maxRows; rows++) {
     const cols = Math.ceil(n / rows);
     const availW = w - GAP * Math.max(0, cols - 1);
-    const availH = h - GAP * Math.max(0, rows - 1);
+    const availH = h - GAP * Math.max(0, rows - 1) - 0; // small safety buffer
     const raw = Math.floor(Math.min(availW / cols, availH / rows));
-    const cell = Math.max(MIN_CELL, Math.min(MAX_CELL, raw || 0));
+
+    const maxHeightCell = Math.floor(
+      (h - GAP * (rows - 1)) / rows
+    );
+
+    const cell = Math.min(
+      MAX_CELL,
+      raw || 0,
+      maxHeightCell
+    );
+
+    
     if (!cell) continue;
+
+    // 🔴 CRITICAL: ensure the full grid actually fits vertically
+    const totalHeight = rows * cell + GAP * (rows - 1);
+    if (totalHeight > h) continue;
 
     if (cell > best.cell) {
       best = { rows, cols, cell };
@@ -1202,12 +1228,13 @@ function render() {
         </div>
         ${buildActionButtonsHtml()}
       </div>
-      <div class="ce-dd-card" style="flex:1 1 auto; min-height:0;">
+      <div class="ce-dd-card" style="flex:1 1 auto; min-height:0; overflow:hidden;">
         ${buildBoardHtml()}
       </div>
     </div>
   `;
   bindUi();
+  fitBoardToCanvas();
 }
 
 
@@ -1717,6 +1744,19 @@ function mount(host) {
 
   applyTeamMarkers();
   render();
+  fitBoardToCanvas();
+
+  if (!MOD.onResize) {
+    MOD.onResize = () => {
+      if (MOD._raf) return;
+      MOD._raf = requestAnimationFrame(() => {
+        MOD._raf = 0;
+        fitBoardToCanvas();
+      });
+    };
+    window.addEventListener('resize', MOD.onResize);
+  }
+
   interceptPhaseGateExit();
 }
 

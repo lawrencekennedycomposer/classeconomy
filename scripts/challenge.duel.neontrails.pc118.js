@@ -25,11 +25,12 @@
   const ROUND_RESET_MS = 1600;
 
   const BIKE_RADIUS = 8;
-  const TRAIL_WIDTH = 8;
-  const START_SPEED = 3.2;
-  const TURN_RATE = 0.055;
-  const ROUND_SPEED_STEP = 0.18;
-  const MAX_SPEED = 4.4;
+  const TRAIL_WIDTH = 8;  
+  const BASELINE_FPS = 31;
+  const START_SPEED = 3.2 * BASELINE_FPS;
+  const TURN_RATE = 0.055 * BASELINE_FPS;
+  const ROUND_SPEED_STEP = 0.18 * BASELINE_FPS;
+  const MAX_SPEED = 4.4 * BASELINE_FPS;
   const INROUND_RAMP_MS = 30000; // 45s to reach 2x
 
   const GRID_GAP = 40;
@@ -76,6 +77,12 @@
       bLeft: false,
       bRight: false
     },
+    gamepad: {
+      aLeft: false,
+      aRight: false,
+      bLeft: false,
+      bRight: false
+    },
     controls: {
       a: { y: 250 },
       b: { y: 250 }
@@ -85,7 +92,9 @@
     keydownHandler: null,
     keyupHandler: null,
     pointerMoveHandler: null,
-    pointerUpHandler: null
+    pointerUpHandler: null,
+    lastTickTs: 0,
+    dt: 0
   };
 
   function now() {
@@ -129,20 +138,26 @@
   }
 
   function resetTouchControls() {
-    MOD.touch.aLeft = MOD.touch.aRight = MOD.touch.bLeft = MOD.touch.bRight = false;
+    MOD.gamepad.aLeft = MOD.gamepad.aRight = MOD.gamepad.bLeft = MOD.gamepad.bRight = false;
   }
 
   function applyGamepadInput() {
     const input = window.CE_INPUT;
-    if (!input?.getPlayerState) return;
+    if (!input?.getPlayerState) {
+      MOD.gamepad.aLeft = false;
+      MOD.gamepad.aRight = false;
+      MOD.gamepad.bLeft = false;
+      MOD.gamepad.bRight = false;
+      return;
+    }
 
     const padA = input.getPlayerState('a');
     const padB = input.getPlayerState('b');
 
-    MOD.touch.aLeft = !!padA.left;
-    MOD.touch.aRight = !!padA.right;
-    MOD.touch.bLeft = !!padB.left;
-    MOD.touch.bRight = !!padB.right;
+    MOD.gamepad.aLeft = !!padA.left;
+    MOD.gamepad.aRight = !!padA.right;
+    MOD.gamepad.bLeft = !!padB.left;
+    MOD.gamepad.bRight = !!padB.right;
   }
 
   function ensureStyles() {
@@ -299,13 +314,25 @@
     return Math.hypot(px - sx, py - sy);
   }
 
-  function hitsTrail(player, ownSkipCount = 10) {
+  function hitsTrail(player, ownSkipDistance = 90) {
     const px = player.x;
     const py = player.y;
     const hitRadius = BIKE_RADIUS + TRAIL_WIDTH * 0.5 - 1;
 
     const ownSegs = segmentsFromTrail(player.trail);
-    for (let i = 0; i < Math.max(0, ownSegs.length - ownSkipCount); i++) {
+    let skipIndex = 0;
+    let dist = 0;
+
+    for (let i = ownSegs.length - 1; i >= 0; i--) {
+      const s = ownSegs[i];
+      dist += Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+      if (dist >= ownSkipDistance) {
+        skipIndex = i;
+        break;
+      }
+    }
+
+    for (let i = 0; i < skipIndex; i++) {
       const s = ownSegs[i];
       if (pointSegmentDistance(px, py, s.x1, s.y1, s.x2, s.y2) <= hitRadius) {
         return true;
@@ -325,22 +352,27 @@
     return false;
   }
 
-  function updateControls() {
-    if (MOD.keys.has('a') || MOD.keys.has('A') || MOD.touch.aLeft) MOD.playerA.angle -= TURN_RATE;
-    if (MOD.keys.has('d') || MOD.keys.has('D') || MOD.touch.aRight) MOD.playerA.angle += TURN_RATE;
+  function updateControls(dt) {
+    const aLeft = MOD.keys.has('a') || MOD.keys.has('A') || MOD.touch.aLeft || MOD.gamepad.aLeft;
+    const aRight = MOD.keys.has('d') || MOD.keys.has('D') || MOD.touch.aRight || MOD.gamepad.aRight;
+    const bLeft = MOD.keys.has('ArrowLeft') || MOD.touch.bLeft || MOD.gamepad.bLeft;
+    const bRight = MOD.keys.has('ArrowRight') || MOD.touch.bRight || MOD.gamepad.bRight;
 
-    if (MOD.keys.has('ArrowLeft') || MOD.touch.bLeft) MOD.playerB.angle -= TURN_RATE;
-    if (MOD.keys.has('ArrowRight') || MOD.touch.bRight) MOD.playerB.angle += TURN_RATE;
+    if (aLeft) MOD.playerA.angle -= TURN_RATE * dt;
+    if (aRight) MOD.playerA.angle += TURN_RATE * dt;
+
+    if (bLeft) MOD.playerB.angle -= TURN_RATE * dt;
+    if (bRight) MOD.playerB.angle += TURN_RATE * dt;
   }
 
-  function movePlayer(player) {
+  function movePlayer(player, dt) {
     const elapsed = Math.max(0, now() - MOD.roundStartedAt);
     const t = clamp(elapsed / INROUND_RAMP_MS, 0, 1);
 
     const speed = player.speed * (1 + t); // 1x → 2x
 
-    player.x += Math.cos(player.angle) * speed;
-    player.y += Math.sin(player.angle) * speed;
+    player.x += Math.cos(player.angle) * speed * dt;
+    player.y += Math.sin(player.angle) * speed * dt;
     player.trail.push({ x: player.x, y: player.y });
   }
 
@@ -396,10 +428,10 @@
   }
 
   function updateLive() {
-    updateControls();
+    updateControls(MOD.dt);
 
-    movePlayer(MOD.playerA);
-    movePlayer(MOD.playerB);
+    movePlayer(MOD.playerA, MOD.dt);
+    movePlayer(MOD.playerB, MOD.dt);
 
     const aWall = checkWallCrash(MOD.playerA);
     const bWall = checkWallCrash(MOD.playerB);
@@ -566,6 +598,12 @@
 
   function tick(ts) {
     if (!MOD.mounted) return;
+
+    if (!MOD.lastTickTs) MOD.lastTickTs = ts;
+    let dt = (ts - MOD.lastTickTs) / 1000;
+    MOD.lastTickTs = ts;
+    if (dt > 0.05) dt = 0.05;
+    MOD.dt = dt;
     
     applyGamepadInput();
 
@@ -744,6 +782,8 @@
     MOD.ctx = null;
     MOD.playerA = null;
     MOD.playerB = null;
+    MOD.lastTickTs = 0;
+    MOD.dt = 0;
 
     try { MOD.root?.remove(); } catch {}
     MOD.root = null;

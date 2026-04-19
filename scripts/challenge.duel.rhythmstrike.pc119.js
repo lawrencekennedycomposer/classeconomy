@@ -89,6 +89,14 @@
       a: [false, false, false, false],
       b: [false, false, false, false]
     },
+    keyboard: {
+      a: [false, false, false, false],
+      b: [false, false, false, false]
+    },
+    gamepad: {
+      a: [false, false, false, false],
+      b: [false, false, false, false]
+    },
     controls: {
       a: { y: 470 },
       b: { y: 470 }
@@ -210,6 +218,12 @@
       : ['j', 'k', 'l', ';'];
   }
 
+  function getLaneCodesForSide(side) {
+    return side === 'a'
+      ? ['KeyA', 'KeyS', 'KeyD', 'KeyF']
+      : ['KeyJ', 'KeyK', 'KeyL', 'Semicolon'];
+  }
+
   function getLaneLabelsForSide(side) {
     return side === 'a'
       ? ['A', 'S', 'D', 'F']
@@ -255,7 +269,10 @@
 
     ['a', 'b'].forEach((side) => {
       for (let lane = 0; lane < LANE_COUNT; lane++) {
-        qs(`[data-btn="${side}-${lane}"]`, MOD.root)?.classList.toggle('is-active', !!MOD.touch[side][lane]);
+        qs(`[data-btn="${side}-${lane}"]`, MOD.root)?.classList.toggle(
+          'is-active',
+          !!(MOD.touch[side][lane] || MOD.gamepad[side][lane] || MOD.keyboard[side][lane])
+        );
       }
     });
   }
@@ -263,6 +280,10 @@
   function clearTouch() {
     MOD.touch.a = [false, false, false, false];
     MOD.touch.b = [false, false, false, false];
+    MOD.keyboard.a = [false, false, false, false];
+    MOD.keyboard.b = [false, false, false, false];
+    MOD.gamepad.a = [false, false, false, false];
+    MOD.gamepad.b = [false, false, false, false];
   }
 
   function createChart(roundNumber) {
@@ -403,7 +424,11 @@
 
   function pollGamepadLaneEdges() {
     const input = window.CE_INPUT;
-    if (!input?.getPlayerState) return;
+    if (!input?.getPlayerState) {
+      MOD.gamepad.a = [false, false, false, false];
+      MOD.gamepad.b = [false, false, false, false];
+      return;
+    }
 
     const padA = input.getPlayerState('a');
     const padB = input.getPlayerState('b');
@@ -423,8 +448,8 @@
     ];
 
     for (let lane = 0; lane < LANE_COUNT; lane++) {
-      MOD.touch.a[lane] = nextA[lane];
-      MOD.touch.b[lane] = nextB[lane];
+      MOD.gamepad.a[lane] = nextA[lane];
+      MOD.gamepad.b[lane] = nextB[lane];
 
       if (nextA[lane] && !MOD.gamepadPrev.a[lane]) {
         triggerLane('a', lane);
@@ -786,23 +811,61 @@
     MOD.keydownHandler = (e) => {
       if (!MOD.mounted) return;
       const key = String(e.key || '');
+      const code = String(e.code || '');
 
       const aKeys = getLaneKeysForSide('a');
+      const aCodes = getLaneCodesForSide('a');
       const bKeys = getLaneKeysForSide('b');
+      const bCodes = getLaneCodesForSide('b');
 
-      const laneA = aKeys.findIndex((k) => k.toLowerCase() === key.toLowerCase());
+      const laneA = aKeys.findIndex((k, i) =>
+        k.toLowerCase() === key.toLowerCase() || aCodes[i] === code
+      );
       if (laneA >= 0) {
+        e.preventDefault();
+        MOD.keyboard.a[laneA] = true;
+        syncButtonVisuals();
         triggerLane('a', laneA);
         return;
       }
 
-      const laneB = bKeys.findIndex((k) => k.toLowerCase() === key.toLowerCase());
+      const laneB = bKeys.findIndex((k, i) =>
+        k.toLowerCase() === key.toLowerCase() || bCodes[i] === code
+      );
       if (laneB >= 0) {
+        e.preventDefault();
+        MOD.keyboard.b[laneB] = true;
+        syncButtonVisuals();
         triggerLane('b', laneB);
       }
     };
 
-    MOD.keyupHandler = () => {};
+    MOD.keyupHandler = (e) => {
+      if (!MOD.mounted) return;
+      const key = String(e.key || '');
+      const code = String(e.code || '');
+
+      const aKeys = getLaneKeysForSide('a');
+      const aCodes = getLaneCodesForSide('a');
+      const bKeys = getLaneKeysForSide('b');
+      const bCodes = getLaneCodesForSide('b');
+
+      const laneA = aKeys.findIndex((k, i) =>
+        k.toLowerCase() === key.toLowerCase() || aCodes[i] === code
+      );
+      if (laneA >= 0) {
+        MOD.keyboard.a[laneA] = false;
+      }
+
+      const laneB = bKeys.findIndex((k, i) =>
+        k.toLowerCase() === key.toLowerCase() || bCodes[i] === code
+      );
+      if (laneB >= 0) {
+        MOD.keyboard.b[laneB] = false;
+      }
+
+      syncButtonVisuals();
+    };
 
     window.addEventListener('pointermove', MOD.pointerMoveHandler);
     window.addEventListener('pointerup', MOD.pointerUpHandler);

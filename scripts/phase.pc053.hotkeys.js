@@ -119,12 +119,8 @@ function resync() {
    Cross-Module Wiring
 --------------------------------------------------------- */
 function wire() {
-  const EVT_UNDO    = E.HISTORY_UNDO    || 'history:undo';
-  const EVT_REDO    = E.HISTORY_REDO    || 'history:redo';
   const EVT_HYDRATE = E.HYDRATION_COMPLETE || 'hydration:complete';
 
-  on(EVT_UNDO,    resync);
-  on(EVT_REDO,    resync);
   on(EVT_HYDRATE, resync);
 }
 

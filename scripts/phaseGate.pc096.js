@@ -307,7 +307,7 @@ function openExtendModal(currentPhase) {
       id: 'phaseGateExtend',
       title: 'Extend Time',
       content,
-      mode: 'modal'
+      mode: 'bottomsheet'
     });
 
     setTimeout(() => {

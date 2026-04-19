@@ -277,7 +277,15 @@
       }
 
       .ce-ch112-slot.is-empty{
-        opacity:0.55;
+        opacity:1;
+        background:rgba(255,255,255,0.12);
+        border:1px solid rgba(255,255,255,0.16);
+      }
+
+      .ce-ch112-slot:not(.is-empty){
+        opacity:1;
+        background:rgba(255,255,255,0.02);
+        border:1px solid rgba(255,255,255,0.06);
       }
 
       .ce-ch112-slotlabel{
@@ -291,13 +299,19 @@
       .ce-ch112-select{
         width:100%;
         border-radius:8px;
-        border:1px solid rgba(255,255,255,0.12);
-        background:rgba(255,255,255,0.07);
+        border:1px solid rgba(255,255,255,0.16);
+        background:rgba(255,255,255,0.10);
         color:#fff;
         padding:8px 10px;
         box-sizing:border-box;
         font-size:12px;
         font-weight:800;
+      }
+
+      .ce-ch112-slot:not(.is-empty) .ce-ch112-select{
+        border:1px solid rgba(255,255,255,0.08);
+        background:rgba(255,255,255,0.03);
+        color:rgba(255,255,255,0.75);
       }
 
     `;

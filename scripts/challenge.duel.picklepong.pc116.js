@@ -18,12 +18,13 @@
   const BALL_SIZE = 16;
 
   const PADDLE_MARGIN = 10;
-  const BASE_PADDLE_SPEED = 11.2;
+  const BASELINE_FPS = 31;
+  const BASE_PADDLE_SPEED = 11.2 * BASELINE_FPS;
   const ROUND_MS = 120000;
   const COUNTDOWN_MS = 3000;
   const RAMP_REBOUNDS = 12;
-  const BASE_STEP_X = 6.4 * (WIDTH / 720);
-  const BASE_STEP_Y = 6.4 * (HEIGHT / 420);
+  const BASE_STEP_X = (6.4 * (WIDTH / 720)) * BASELINE_FPS;
+  const BASE_STEP_Y = (6.4 * (HEIGHT / 420)) * BASELINE_FPS;
   const MAX_TOTAL_SCALE = 3.5;
   const SERVE_SETTLE_MS = 4500;
 
@@ -34,6 +35,7 @@
     frameId: null,
     pair: null,
     onComplete: null,
+    lastTickTs: 0,
 
     phase: 'idle', // idle | countdown | live | suddenDeath | finished
     countdownUntil: 0,
@@ -50,6 +52,10 @@
     ball: { x: 0, y: 0, vx: 0, vy: 0 },
 
     input: {
+      a: { up: false, down: false },
+      b: { up: false, down: false }
+    },
+    gamepadInput: {
       a: { up: false, down: false },
       b: { up: false, down: false }
     },
@@ -239,6 +245,10 @@
     MOD.input.a.down = false;
     MOD.input.b.up = false;
     MOD.input.b.down = false;
+    MOD.gamepadInput.a.up = false;
+    MOD.gamepadInput.a.down = false;
+    MOD.gamepadInput.b.up = false;
+    MOD.gamepadInput.b.down = false;
   }
 
   function timeSpeedScale() {
@@ -301,23 +311,29 @@
 
   function syncButtonVisuals() {
     if (!MOD.root) return;
-    MOD.root.querySelector('[data-btn="a-up"]')?.classList.toggle('is-active', !!MOD.input.a.up);
-    MOD.root.querySelector('[data-btn="a-down"]')?.classList.toggle('is-active', !!MOD.input.a.down);
-    MOD.root.querySelector('[data-btn="b-up"]')?.classList.toggle('is-active', !!MOD.input.b.up);
-    MOD.root.querySelector('[data-btn="b-down"]')?.classList.toggle('is-active', !!MOD.input.b.down);
+    MOD.root.querySelector('[data-btn="a-up"]')?.classList.toggle('is-active', !!(MOD.input.a.up || MOD.gamepadInput.a.up));
+    MOD.root.querySelector('[data-btn="a-down"]')?.classList.toggle('is-active', !!(MOD.input.a.down || MOD.gamepadInput.a.down));
+    MOD.root.querySelector('[data-btn="b-up"]')?.classList.toggle('is-active', !!(MOD.input.b.up || MOD.gamepadInput.b.up));
+    MOD.root.querySelector('[data-btn="b-down"]')?.classList.toggle('is-active', !!(MOD.input.b.down || MOD.gamepadInput.b.down));
   }
 
   function applyGamepadInput() {
     const input = window.CE_INPUT;
-    if (!input?.getPlayerState) return;
+    if (!input?.getPlayerState) {
+      MOD.gamepadInput.a.up = false;
+      MOD.gamepadInput.a.down = false;
+      MOD.gamepadInput.b.up = false;
+      MOD.gamepadInput.b.down = false;
+      return;
+    }
 
     const padA = input.getPlayerState('a');
     const padB = input.getPlayerState('b');
 
-    MOD.input.a.up = !!padA.up;
-    MOD.input.a.down = !!padA.down;
-    MOD.input.b.up = !!padB.up;
-    MOD.input.b.down = !!padB.down;
+    MOD.gamepadInput.a.up = !!padA.up;
+    MOD.gamepadInput.a.down = !!padA.down;
+    MOD.gamepadInput.b.up = !!padB.up;
+    MOD.gamepadInput.b.down = !!padB.down;
   }
 
   function updateOverlay() {
@@ -368,24 +384,29 @@
     }
   }
 
-  function updatePaddles() {
-    if (MOD.input.a.up) MOD.pA.y -= BASE_PADDLE_SPEED;
-    if (MOD.input.a.down) MOD.pA.y += BASE_PADDLE_SPEED;
-    if (MOD.input.b.up) MOD.pB.y -= BASE_PADDLE_SPEED;
-    if (MOD.input.b.down) MOD.pB.y += BASE_PADDLE_SPEED;
+  function updatePaddles(dt) {
+    const aUp = MOD.input.a.up || MOD.gamepadInput.a.up;
+    const aDown = MOD.input.a.down || MOD.gamepadInput.a.down;
+    const bUp = MOD.input.b.up || MOD.gamepadInput.b.up;
+    const bDown = MOD.input.b.down || MOD.gamepadInput.b.down;
+
+    if (aUp) MOD.pA.y -= BASE_PADDLE_SPEED * dt;
+    if (aDown) MOD.pA.y += BASE_PADDLE_SPEED * dt;
+    if (bUp) MOD.pB.y -= BASE_PADDLE_SPEED * dt;
+    if (bDown) MOD.pB.y += BASE_PADDLE_SPEED * dt;
 
     MOD.pA.y = clamp(MOD.pA.y, 0, HEIGHT - PADDLE_H);
     MOD.pB.y = clamp(MOD.pB.y, 0, HEIGHT - PADDLE_H);
   }
 
-  function updateBall() {
+  function updateBall(dt) {
     const speedScale = MOD.phase === 'suddenDeath'
       ? Math.min(MAX_TOTAL_SCALE, totalSpeedScale() * 1.08)
       : (totalSpeedScale() * serveSettleFactor());
     const ball = MOD.ball;
 
-    ball.x += ball.vx * speedScale;
-    ball.y += ball.vy * speedScale;
+    ball.x += ball.vx * speedScale * dt;
+    ball.y += ball.vy * speedScale * dt;
 
     if (ball.y <= 0) {
       ball.y = 0;
@@ -439,7 +460,7 @@
 
     if (ball.x > WIDTH + BALL_SIZE) {
       MOD.scoreA += 1;
-+      serve(-1);
+      serve(-1);
     }
   }
 
@@ -491,11 +512,14 @@
     syncButtonVisuals();
   }
 
-  function tick() {
+  function tick(ts) {
     if (!MOD.mounted) return;
 
-    const ts = now();
-    
+    if (!MOD.lastTickTs) MOD.lastTickTs = ts;
+    let dt = (ts - MOD.lastTickTs) / 1000;
+    MOD.lastTickTs = ts;
+    if (dt > 0.05) dt = 0.05;
+
     applyGamepadInput();    
 
     if (MOD.phase === 'countdown') {
@@ -504,8 +528,8 @@
         MOD.endsAt = ts + ROUND_MS;
       }
     } else if (MOD.phase === 'live') {
-      updatePaddles();
-      updateBall();
+      updatePaddles(dt);
+      updateBall(dt);
 
       if (ts >= MOD.endsAt) {
         if (MOD.scoreA === MOD.scoreB) {
@@ -516,8 +540,8 @@
         }
       }
     } else if (MOD.phase === 'suddenDeath') {
-      updatePaddles();
-      updateBall();
+      updatePaddles(dt);
+      updateBall(dt);
 
       if (MOD.scoreA !== MOD.scoreB) {
         finish();
@@ -660,6 +684,7 @@
     MOD.controls.b.y = 250;
     MOD.scoreA = 0;
     MOD.scoreB = 0;
+    MOD.lastTickTs = 0;
     resetInputs();
     try { window.CE_INPUT?.start?.(); } catch {}
     serve(Math.random() < 0.5 ? -1 : 1);
@@ -695,6 +720,7 @@
 
     MOD.mounted = false;
     MOD.host = null;
+    MOD.lastTickTs = 0;
     MOD.canvas = null;
     MOD.ctx = null;
 

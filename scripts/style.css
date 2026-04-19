@@ -108,6 +108,15 @@ body.leaderboard-right #leaderboard {
   cursor: pointer;
 }
 
+#undo-btn,
+#redo-btn {
+  display: none !important;
+
+#history-btn {
+  display: none !important;
+}
+}
+
 
 /* =========================================================
    ACTIVITY CANVAS

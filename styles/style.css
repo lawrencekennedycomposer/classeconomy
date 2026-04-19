@@ -504,3 +504,12 @@ body.leaderboard-right #leaderboard {
   outline: none !important;
   border-color: #6a6a6a !important;
 }
+
+/* =========================================================
+   TEMP MVP HIDE – undo / redo / history
+========================================================= */
+#undo-btn,
+#redo-btn,
+#history-btn {
+  display: none !important;
+}

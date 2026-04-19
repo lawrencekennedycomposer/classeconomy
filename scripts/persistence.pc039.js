@@ -129,18 +129,47 @@ function _exportFilename(ext) {
   return `${cls}_${yyyy}-${mm}-${dd}_${hh}-${mi}.${ext}`;
 }
 
-function downloadText(filename, text, mime = 'text/plain;charset=utf-8') {
+async function downloadText(filename, text, mime = 'text/plain;charset=utf-8') {
   try {
-    const blob = new Blob([String(text ?? '')], { type: mime });
+    const safeName = String(filename || 'export.txt');
+    const safeText = String(text ?? '');
+    const safeMime = String(mime || 'text/plain;charset=utf-8');
+    const blob = new Blob([safeText], { type: safeMime });
+
+    const canPick =
+      typeof window !== 'undefined' &&
+      typeof window.showSaveFilePicker === 'function' &&
+      window.isSecureContext;
+
+    if (canPick) {
+      const ext = safeName.includes('.') ? `.${safeName.split('.').pop()}` : '';
+      const handle = await window.showSaveFilePicker({
+        suggestedName: safeName,
+        types: [{
+          description: ext ? `${ext.slice(1).toUpperCase()} file` : 'Text file',
+          accept: {
+            [safeMime.split(';')[0] || 'text/plain']: ext ? [ext] : ['.txt']
+          }
+        }]
+      });
+
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = String(filename || 'export.txt');
+    a.download = safeName;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    return true;
   } catch {}
+  return false;
 }
 
 function readFileAsText(file) {

@@ -924,6 +924,44 @@ try {
     .catch(()=>{});
 } catch {}
 
+
+/* =========================================================
+   PC#0XX – Wire topbar undo / redo buttons (append-only)
+========================================================= */
+try {
+  (function wireUndoRedoButtons() {
+    const attempt = () => {
+      const Ev =
+        window.__CE_BOOT?.CE?.modules?.Events ||
+        window.__CE_BOOT?.modules?.Events ||
+        Events;
+
+      const undoBtn = document.getElementById('undo-btn');
+      const redoBtn = document.getElementById('redo-btn');
+
+      if (!undoBtn && !redoBtn) {
+        return setTimeout(attempt, 100);
+      }
+
+      if (undoBtn && !undoBtn.dataset.wiredUndo) {
+        undoBtn.dataset.wiredUndo = '1';
+        undoBtn.addEventListener('click', () => {
+          try { Ev.emit('history:undo', { ts: Date.now(), source: 'topbar' }); } catch {}
+        });
+      }
+
+      if (redoBtn && !redoBtn.dataset.wiredRedo) {
+        redoBtn.dataset.wiredRedo = '1';
+        redoBtn.addEventListener('click', () => {
+          try { Ev.emit('history:redo', { ts: Date.now(), source: 'topbar' }); } catch {}
+        });
+      }
+    };
+
+    attempt();
+  })();
+} catch {}
+
 /* =========================================================
    PC#050 – Teacher Menu (Class Economy) – append-only
 ========================================================= */

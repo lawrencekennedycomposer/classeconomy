@@ -262,7 +262,7 @@ function wireWindow() {
 
   // Banking & export
   q('[data-tm-action="bank"]')?.addEventListener('click', () => {
-    Ev.emit('bank:run', { ts: Date.now(), source: 'teacher-menu' });
+    Ev.emit('bank:request', { ts: Date.now(), source: 'teacher-menu' });
   });
 
   q('[data-tm-action="csv"]')?.addEventListener('click', () => {
