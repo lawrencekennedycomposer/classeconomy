@@ -433,8 +433,12 @@
       ball.x = leftPaddleX + PADDLE_W;
       ball.vx = Math.abs(ball.vx);
 
-      const rel = ((ball.y + BALL_SIZE / 2) - (MOD.pA.y + PADDLE_H / 2)) / (PADDLE_H / 2);
-      ball.vy = rel * 5.2;
+      const rel = clamp(
+        ((ball.y + BALL_SIZE / 2) - (MOD.pA.y + PADDLE_H / 2)) / (PADDLE_H / 2),
+        -1,
+        1
+      );
+      ball.vy = Math.abs(rel) < 0.08 ? 0 : rel * (BASE_STEP_Y * 0.92);
       MOD.reboundCount += 1;
     }
 
@@ -448,8 +452,12 @@
       ball.x = rightPaddleX - BALL_SIZE;
       ball.vx = -Math.abs(ball.vx);
 
-      const rel = ((ball.y + BALL_SIZE / 2) - (MOD.pB.y + PADDLE_H / 2)) / (PADDLE_H / 2);
-      ball.vy = rel * 5.2;
+      const rel = clamp(
+        ((ball.y + BALL_SIZE / 2) - (MOD.pB.y + PADDLE_H / 2)) / (PADDLE_H / 2),
+        -1,
+        1
+      );
+      ball.vy = Math.abs(rel) < 0.08 ? 0 : rel * (BASE_STEP_Y * 0.92);
       MOD.reboundCount += 1;
     }
 

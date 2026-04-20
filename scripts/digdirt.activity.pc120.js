@@ -613,7 +613,7 @@
         min-height:0;
         display:flex;
         flex-direction:column;
-        overflow:hidden;
+        overflow:auto;
       }
       #ce-digdirt-root .ce-dd-stats{
         display:flex;
@@ -646,7 +646,7 @@
         display:grid;
         gap:10px;
         padding:6px;
-        overflow:auto;
+        overflow:visible;
         grid-template-columns:repeat(var(--dd-cols, 6), var(--dd-cell, 96px));
         grid-template-rows:repeat(var(--dd-rows, 6), var(--dd-cell, 96px));
         justify-content:center;
@@ -1228,7 +1228,7 @@ function render() {
         </div>
         ${buildActionButtonsHtml()}
       </div>
-      <div class="ce-dd-card" style="flex:1 1 auto; min-height:0; overflow:hidden;">
+      <div class="ce-dd-card" style="flex:1 1 auto; min-height:0; overflow:auto;">
         ${buildBoardHtml()}
       </div>
     </div>
