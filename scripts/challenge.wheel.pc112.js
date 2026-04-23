@@ -268,11 +268,11 @@
         display:flex;
         flex-direction:column;
         gap:6px;
-        padding:8px 10px;
+        padding:6px 8px;
         border-radius:10px;
         background:rgba(255,255,255,0.08);
         border:1px solid rgba(255,255,255,0.10);
-        min-height:54px;
+        min-height:46px;
         box-sizing:border-box;
       }
 
@@ -295,23 +295,95 @@
         font-weight:900;
         color:#e8eef2;
       }
+      .ce-ch112-dd{
+        position:relative;
+      }
+
+      .ce-ch112-dd-btn{
+        width:100%;
+        border-radius:8px;
+        border:1px solid rgba(255,255,255,0.16);
+        background:#ffffff;
+        color:#1f2933;
+        padding:6px 8px;
+        font-size:12px;
+        font-weight:800;
+        text-align:left;
+        line-height:1.2;
+        cursor:pointer;
+      }
+
+      .ce-ch112-dd-menu{
+        position:absolute;
+        bottom:calc(100% + 4px);
+        left:0;
+        right:0;
+        top:auto;
+        background:#ffffff;
+        border:1px solid rgba(0,0,0,0.15);
+        border-radius:8px;
+        margin-top:0;
+        max-height:132px;
+        display:none;
+        z-index:100;
+        max-height:160px;
+        overflow:auto;
+      }
+
+      .ce-ch112-dd.open .ce-ch112-dd-menu{
+        display:block;
+      }
+
+      .ce-ch112-dd-option{
+        padding:6px 8px;
+        cursor:pointer;
+        color:#1f2933;
+        font-size:12px;
+        line-height:1.2;
+      }
+
+      .ce-ch112-dd-option:hover{
+        background:#f3f4f6;
+      }
+
+      .ce-ch112-root select,
+      .ce-ch112-root option{
+        color:#1f2933 !important;
+        background:#ffffff !important;
+      }
 
       .ce-ch112-select{
         width:100%;
         border-radius:8px;
         border:1px solid rgba(255,255,255,0.16);
-        background:rgba(255,255,255,0.10);
-        color:#fff;
+        background:#ffffff;
+        color:#1f2933;
         padding:8px 10px;
         box-sizing:border-box;
         font-size:12px;
         font-weight:800;
       }
 
+      .ce-ch112-select option{
+        background:#ffffff;
+        color:#1f2933;
+      }
+
+      .ce-ch112-select:focus{
+        outline:none;
+        border-color:#f59e0b;
+        box-shadow:0 0 0 2px rgba(245,158,11,0.18);
+      }
+
       .ce-ch112-slot:not(.is-empty) .ce-ch112-select{
         border:1px solid rgba(255,255,255,0.08);
-        background:rgba(255,255,255,0.03);
-        color:rgba(255,255,255,0.75);
+        background:#ffffff;
+        color:#374151;
+      }
+
+      .ce-ch112-slot:not(.is-empty) .ce-ch112-select option{
+        background:#ffffff;
+        color:#374151;
       }
 
     `;
@@ -380,12 +452,18 @@
     const id = `ce-ch112-${field}`;
     return `
       <label class="ce-ch112-slotlabel" for="${id}">${escapeHtml(label)}</label>
-      <select id="${id}" name="${id}" class="ce-ch112-select" data-ch112-field="${escapeHtml(field)}">
-        <option value="">Select activity</option>
-        ${activities.map((name) => `
-          <option value="${escapeHtml(name)}" ${selected === name ? 'selected' : ''}>${escapeHtml(name)}</option>
-        `).join('')}
-      </select>
+      <div class="ce-ch112-dd" data-ch112-field="${escapeHtml(field)}">
+        <button type="button" class="ce-ch112-dd-btn">
+          ${selected ? escapeHtml(selected) : 'Select activity'}
+        </button>
+        <div class="ce-ch112-dd-menu">
+          ${activities.map((name) => `
+            <div class="ce-ch112-dd-option" data-value="${escapeHtml(name)}">
+              ${escapeHtml(name)}
+            </div>
+          `).join('')}
+        </div>
+      </div>
     `;
   }
 
@@ -434,11 +512,20 @@
       </div>
     `;
 
-    MOD.root.querySelectorAll('[data-ch112-field]').forEach((sel) => {
-      sel.addEventListener('change', (e) => {
-        const field = String(e.currentTarget?.getAttribute('data-ch112-field') || '');
-        nomination?.setNomination?.(field, e.currentTarget?.value || '');
-        render();
+    MOD.root.querySelectorAll('.ce-ch112-dd').forEach((dd) => {
+      const field = dd.getAttribute('data-ch112-field');
+      const btn = dd.querySelector('.ce-ch112-dd-btn');
+
+      btn?.addEventListener('click', () => {
+        dd.classList.toggle('open');
+      });
+
+      dd.querySelectorAll('.ce-ch112-dd-option').forEach((opt) => {
+        opt.addEventListener('click', () => {
+          const value = opt.getAttribute('data-value') || '';
+          nomination?.setNomination?.(field, value);
+          render();
+        });
       });
     });
 
@@ -544,7 +631,7 @@
 
     wheel.classList.remove('is-snapping');
     wheel.classList.add('is-spinning');
-    wheel.style.transition = `transform ${(2.8 + extraTurns * 0.25) * 3}s cubic-bezier(.12,.78,.10,1)`;
+    wheel.style.transition = `transform ${(2.8 + extraTurns * 0.25) * 3 * 0.7}s cubic-bezier(.12,.78,.10,1)`;
 
     void wheel.offsetWidth;
 

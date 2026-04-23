@@ -20,7 +20,8 @@
   const PADDLE_MARGIN = 10;
   const BASELINE_FPS = 31;
   const BASE_PADDLE_SPEED = 11.2 * BASELINE_FPS;
-  const ROUND_MS = 120000;
+  const ROUND_MS = 90000;
+  const RAMP_REFERENCE_MS = 120000;
   const COUNTDOWN_MS = 3000;
   const RAMP_REBOUNDS = 12;
   const BASE_STEP_X = (6.4 * (WIDTH / 720)) * BASELINE_FPS;
@@ -253,7 +254,7 @@
 
   function timeSpeedScale() {
     const elapsed = Math.max(0, ROUND_MS - Math.max(0, MOD.endsAt - now()));
-    const t = clamp(elapsed / ROUND_MS, 0, 1);
+    const t = clamp(elapsed / RAMP_REFERENCE_MS, 0, 1);
     const eased = t * t;
     return 1 + eased * 2.5;
   }
@@ -375,7 +376,7 @@
         const secs = total % 60;
         timerEl.textContent = `${mins}:${String(secs).padStart(2, '0')}`;
       } else if (MOD.phase === 'countdown') {
-        timerEl.textContent = '2:00';
+          timerEl.textContent = '1:30';
       } else if (MOD.phase === 'suddenDeath') {
         timerEl.textContent = 'SD';
       } else {

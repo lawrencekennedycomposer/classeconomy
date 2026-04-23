@@ -18,6 +18,10 @@
    ========================================================= */
 
 (() => {
+  const COUNTDOWN_MS = 3000;
+  const ROUND_MS = 40000;
+  const BREAK_MS = 14000;
+
   const MOD = {
     mounted: false,
     root: null,
@@ -26,7 +30,9 @@
     lastCountdownDisplay: null,
     countdownUntil: 0,
     endsAt: 0,
-    phase: 'idle', // idle | countdown | live | suddenDeath | finished
+    breakUntil: 0,
+    round: 1,
+    phase: 'idle', // idle | countdown | live | break | suddenDeath | finished
     pair: null,
     onComplete: null,
     scoreA: 0,
@@ -37,6 +43,7 @@
     nextRelocateA: 0,
     nextRelocateB: 0,
     suddenRelocateAt: 0,
+    bursts: [],
   };
 
   function ensureStyles() {
@@ -230,6 +237,27 @@
         opacity:0;
         transform:translate(-50%, -50%) scale(0.7);
       }
+      .ce-ch115-burst{
+        position:absolute;
+        border-radius:999px;
+        pointer-events:none;
+        transform:translate(-50%, -50%);
+        z-index:4;
+        animation:ce-ch115-burst 320ms ease-out forwards;
+      }
+
+      .ce-ch115-burst--a{
+        background:radial-gradient(circle, rgba(96,165,250,0.55) 0%, rgba(59,130,246,0.28) 45%, rgba(59,130,246,0.00) 72%);
+      }
+
+      .ce-ch115-burst--b{
+        background:radial-gradient(circle, rgba(52,211,153,0.55) 0%, rgba(16,185,129,0.28) 45%, rgba(16,185,129,0.00) 72%);
+      }
+
+      .ce-ch115-burst--sudden{
+        background:radial-gradient(circle, rgba(251,191,36,0.60) 0%, rgba(245,158,11,0.30) 45%, rgba(245,158,11,0.00) 72%);
+      }
+
 
       .ce-ch115-target--sudden{
         background:
@@ -252,6 +280,11 @@
       @keyframes ce-ch115-countPulse{
         from{ transform:scale(0.72); opacity:0; }
         to{ transform:scale(1); opacity:1; }
+      }
+
+      @keyframes ce-ch115-burst{
+        from{ transform:translate(-50%, -50%) scale(0.35); opacity:0.95; }
+        to{ transform:translate(-50%, -50%) scale(1.55); opacity:0; }
       }
     `;
     document.head.appendChild(s);
@@ -279,10 +312,10 @@
   }
 
   function phaseSettings(msElapsed) {
-    if (msElapsed < 30000) {
+    if (msElapsed < 10000) {
       return { size: 72, relocateMs: 1200 };
     }
-    if (msElapsed < 90000) {
+    if (msElapsed < 30000) {
       return { size: 64, relocateMs: 900 };
     }
     return { size: 56, relocateMs: 650 };
@@ -319,8 +352,23 @@
     MOD.suddenTarget = null;
   }
 
+  function spawnBurst(target) {
+    MOD.bursts.push({
+      id: `burst-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      side: target?.sudden ? 'sudden' : target?.side,
+      x: Number(target?.x || 0),
+      y: Number(target?.y || 0),
+      size: Math.max(64, Number(target?.size || 0) * 1.45),
+    });
+
+    setTimeout(() => {
+      MOD.bursts = MOD.bursts.filter((b) => b.id !== MOD.bursts[0]?.id || b.x !== Number(target?.x || 0) || b.y !== Number(target?.y || 0));
+      render();
+    }, 320);
+  }
+
   function spawnStandardTargets(ts) {
-    const elapsed = Math.max(0, ts - (MOD.endsAt - 120000));
+    const elapsed = Math.max(0, ts - (MOD.endsAt - ROUND_MS));
     const cfg = phaseSettings(elapsed);
 
     MOD.targetA = makeTarget('a', cfg.size, false);
@@ -349,7 +397,9 @@
       if (MOD.phase === 'live') {
         timerEl.textContent = formatTime(Math.max(0, MOD.endsAt - now()));
       } else if (MOD.phase === 'countdown') {
-        timerEl.textContent = '2:00';
+        timerEl.textContent = '0:40';
+      } else if (MOD.phase === 'break') {
+        timerEl.textContent = formatTime(Math.max(0, MOD.breakUntil - now()));
       } else if (MOD.phase === 'suddenDeath') {
         timerEl.textContent = 'SD';
       } else {
@@ -389,6 +439,8 @@
 
     const overlayHtml = MOD.phase === 'countdown'
       ? `<div class="ce-ch115-overlay"><div class="ce-ch115-countdown">${countdownLeft > 0 ? countdownLeft : 'GO'}</div></div>`
+      : MOD.phase === 'break'
+        ? `<div class="ce-ch115-overlay"><div class="ce-ch115-banner">Break<br>${escapeHtml(formatTime(Math.max(0, MOD.breakUntil - now())))}</div></div>`
       : MOD.phase === 'suddenDeath'
         ? `<div class="ce-ch115-overlay"><div class="ce-ch115-banner">Sudden Death</div></div>`
         : MOD.phase === 'finished'
@@ -405,8 +457,8 @@
 
           <div class="ce-ch115-center">
             <div class="ce-ch115-title">Target Tap</div>
-            <div class="ce-ch115-timer">${MOD.phase === 'live' ? escapeHtml(formatTime(timeLeftMs)) : MOD.phase === 'countdown' ? '2:00' : MOD.phase === 'suddenDeath' ? 'SD' : '0:00'}</div>
-            <div class="ce-ch115-sub">Tap the targets in your half</div>
+            <div class="ce-ch115-timer">${MOD.phase === 'live' ? escapeHtml(formatTime(timeLeftMs)) : MOD.phase === 'countdown' ? '0:40' : MOD.phase === 'break' ? escapeHtml(formatTime(Math.max(0, MOD.breakUntil - now()))) : MOD.phase === 'suddenDeath' ? 'SD' : '0:00'}</div>
+            <div class="ce-ch115-sub">${MOD.phase === 'break' ? `Break before Round ${escapeHtml(String(MOD.round + 1))}` : `Round ${escapeHtml(String(MOD.round))} • Tap the targets in your half`}</div>
           </div>
 
           <div class="ce-ch115-side ce-ch115-side--right">
@@ -440,6 +492,19 @@
       if (suddenHost) suddenHost.appendChild(renderTargetNode(MOD.suddenTarget));
     }
 
+    MOD.bursts.forEach((burst) => {
+      const host = burst.side === 'a' ? halfA : halfB;
+      if (!host) return;
+
+      const puff = document.createElement('div');
+      puff.className = `ce-ch115-burst ce-ch115-burst--${burst.side === 'sudden' ? 'sudden' : burst.side}`;
+      puff.style.left = `${burst.x}px`;
+      puff.style.top = `${burst.y}px`;
+      puff.style.width = `${burst.size}px`;
+      puff.style.height = `${burst.size}px`;
+      host.appendChild(puff);
+    });
+
     updateHud();
   }
 
@@ -466,6 +531,8 @@
     if (!target) return;
 
     node?.classList?.add('is-hit');
+    spawnBurst(target);
+    render();
 
     if (MOD.phase === 'live') {
       if (target.side === 'a') {
@@ -478,7 +545,7 @@
       }
 
       const ts = now();
-      const cfg = phaseSettings(Math.max(0, ts - (MOD.endsAt - 120000)));
+      const cfg = phaseSettings(Math.max(0, ts - (MOD.endsAt - ROUND_MS)));
 
       setTimeout(() => {
         if (target.side === 'a') {
@@ -531,7 +598,7 @@
       if (ts >= MOD.countdownUntil) {
         MOD.phase = 'live';
         MOD.lastCountdownDisplay = null;
-        MOD.endsAt = ts + 120000;
+        MOD.endsAt = ts + ROUND_MS;
         spawnStandardTargets(ts);
         render();
       } else {
@@ -543,8 +610,18 @@
           updateHud();
         }
       }
+    } else if (MOD.phase === 'break') {
+      if (ts >= MOD.breakUntil) {
+        MOD.phase = 'live';
+        MOD.endsAt = ts + ROUND_MS;
+        spawnStandardTargets(ts);
+        render();
+      } else {
+        updateHud();
+        render();
+      }
     } else if (MOD.phase === 'live') {
-      const elapsed = Math.max(0, ts - (MOD.endsAt - 120000));
+      const elapsed = Math.max(0, ts - (MOD.endsAt - ROUND_MS));
       const cfg = phaseSettings(elapsed);
 
       if (ts >= MOD.nextRelocateA && MOD.targetA) {
@@ -559,7 +636,13 @@
       }
 
       if (ts >= MOD.endsAt) {
-        if (MOD.scoreA > MOD.scoreB) {
+        if (MOD.round === 1) {
+          MOD.phase = 'break';
+          MOD.breakUntil = ts + BREAK_MS;
+          MOD.round = 2;
+          clearTargets();
+          render();
+        } else if (MOD.scoreA > MOD.scoreB) {
           finishWithWinner(MOD.pair?.a, MOD.pair?.b);
         } else if (MOD.scoreB > MOD.scoreA) {
           finishWithWinner(MOD.pair?.b, MOD.pair?.a);
@@ -592,9 +675,12 @@
     MOD.scoreA = 0;
     MOD.scoreB = 0;
     MOD.lastCountdownDisplay = null;
+    MOD.bursts = [];
+    MOD.round = 1;
     MOD.phase = 'countdown';
-    MOD.countdownUntil = now() + 3000;
+    MOD.countdownUntil = now() + COUNTDOWN_MS;
     MOD.endsAt = 0;
+    MOD.breakUntil = 0;
     MOD.nextRelocateA = 0;
     MOD.nextRelocateB = 0;
     MOD.suddenRelocateAt = 0;
@@ -625,6 +711,9 @@
     MOD.onComplete = null;
     MOD.scoreA = 0;
     MOD.scoreB = 0;
+    MOD.bursts = [];
+    MOD.breakUntil = 0;
+    MOD.round = 1;
     clearTargets();
 
     try { MOD.root?.remove?.(); } catch {}
