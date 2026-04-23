@@ -543,6 +543,53 @@ function _ensureDefaultClass(userId = 'u1') {
   return Storage.getClasses(userId) || (created ? [created] : []);
 }
 
+async function _saveCurrentClassJSONViaPicker() {
+  const json = Storage.exportAdvisoryJSON?.();
+  if (!json) return false;
+
+  const className = String(Storage.getClassName?.() || 'Class').trim() || 'Class';
+  const safeClass = className.replace(/[\\/:*?"<>|]/g, '-');
+
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+
+  const filename = `${safeClass} ${yyyy}-${mm}-${dd} ${hh}-${min}.json`;
+
+  if (typeof window.showSaveFilePicker === 'function') {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: filename,
+      types: [
+        {
+          description: 'JSON Files',
+          accept: { 'application/json': ['.json'] }
+        }
+      ]
+    });
+
+    const writable = await handle.createWritable();
+    await writable.write(json);
+    await writable.close();
+    return true;
+  }
+
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    try { URL.revokeObjectURL(url); } catch {}
+  }, 1000);
+  return true;
+}
+
 function _initClassSelectReloadSwitch() {
   const sel = document.getElementById('class-select');
   if (!sel) return false;
@@ -583,7 +630,7 @@ function _initClassSelectReloadSwitch() {
   // Set current selection if available
   if (activeId) sel.value = activeId;
 
-  sel.addEventListener('change', () => {
+  sel.addEventListener('change', async () => {
     let targetId = String(sel.value || '').trim();
     if (!targetId) return;
 
@@ -650,8 +697,14 @@ function _initClassSelectReloadSwitch() {
       return;
     }
 
-    // ---- FORCE SAVE CURRENT CLASS BEFORE SWITCH ----
+    // ---- FORCE SAVE + EXPORT CURRENT CLASS BEFORE SWITCH ----
     try { persistScores(); } catch {}
+    try {
+      await _saveCurrentClassJSONViaPicker();
+    } catch {
+      sel.value = activeId || (classes[0]?.id || '');
+      return;
+    }
     try { Storage.remove(Storage.KEYS.HISTORY_V1); } catch {}
 
     // ---- SWITCH VIA SESSION + RELOAD (welcome reset) ----
