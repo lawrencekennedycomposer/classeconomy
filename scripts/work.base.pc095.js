@@ -39,6 +39,9 @@
     elIntervalTimer: null,
     elPhaseTimer: null,
     btnAll: null,
+    btnAllLock: null,
+    allLockIntervalsRemaining: 0,
+    allLockMaxIntervals: 5,
 
     // pdf
     pdf: {
@@ -173,6 +176,32 @@
     return true;
   }
 
+  function setAllActiveEngaged(setTo) {
+    const active = getActiveStudentIds();
+    if (!active.length) return;
+
+    for (const sid of active) {
+      WORK.engagedById.set(sid, !!setTo);
+    }
+    syncOverlayVisuals();
+  }
+
+  function updateAllLockButton() {
+    if (!WORK.btnAllLock) return;
+
+    const n = Number(WORK.allLockIntervalsRemaining || 0);
+    WORK.btnAllLock.textContent = n > 0 ? `ALL x${n}` : 'ALL x0';
+    WORK.btnAllLock.title = 'Lock ALL green for up to 5 intervals';
+
+    if (n > 0) {
+      WORK.btnAllLock.style.fontWeight = '800';
+      WORK.btnAllLock.style.boxShadow = '0 0 8px rgba(0,255,0,0.35)';
+    } else {
+      WORK.btnAllLock.style.fontWeight = '';
+      WORK.btnAllLock.style.boxShadow = '';
+    }
+  }
+
   // -------------------------------
   // Topbar UI
   // -------------------------------
@@ -224,16 +253,38 @@
       const allOn = isAllActiveEngaged();
       const setTo = !allOn; // if allOn -> false, else true
 
-      for (const sid of active) {
-        WORK.engagedById.set(sid, setTo);
+      if (!setTo) {
+        WORK.allLockIntervalsRemaining = 0;
+        updateAllLockButton();
       }
-      syncOverlayVisuals();
+
+      setAllActiveEngaged(setTo);
+    });
+
+    // ALL interval lock button
+    const btnAllLock = document.createElement('button');
+    btnAllLock.className = 'topbar-btn';
+    btnAllLock.type = 'button';
+    btnAllLock.textContent = 'ALL x0';
+    btnAllLock.title = 'Lock ALL green for up to 5 intervals';
+    btnAllLock.addEventListener('click', () => {
+      const active = getActiveStudentIds();
+      if (!active.length) return;
+
+      const cur = Number(WORK.allLockIntervalsRemaining || 0);
+      const next = cur >= WORK.allLockMaxIntervals ? 0 : cur + 1;
+
+      WORK.allLockIntervalsRemaining = next;
+      updateAllLockButton();
+
+      if (next > 0) setAllActiveEngaged(true);
     });
 
     wrap.appendChild(interval);
     wrap.appendChild(boostEl);
     wrap.appendChild(btnAll);
-
+    wrap.appendChild(btnAllLock);
+ 
     topbar.appendChild(wrap);
 
 
@@ -256,7 +307,10 @@
     WORK.elIntervalTimer = interval;
     WORK.elPhaseTimer = null; // keep phase timer ONLY in burnline bar
     WORK.btnAll = btnAll;
+    WORK.btnAllLock = btnAllLock;
     WORK.elBoost = boostEl;
+
+    updateAllLockButton();
   }
 
   function unmountTopbar() {
@@ -269,6 +323,7 @@
     WORK.elIntervalTimer = null;
     WORK.elPhaseTimer = null;
     WORK.btnAll = null;
+    WORK.btnAllLock = null;
   }
 
   // -------------------------------
@@ -461,6 +516,16 @@
     }
 
     // Reset engagement flags for next interval
+    if (WORK.allLockIntervalsRemaining > 0) {
+      WORK.allLockIntervalsRemaining = Math.max(0, WORK.allLockIntervalsRemaining - 1);
+      updateAllLockButton();
+
+      if (WORK.allLockIntervalsRemaining > 0) {
+        setAllActiveEngaged(true);
+        return;
+      }
+    }
+
     for (const sid of active) {
       WORK.engagedById.set(sid, false);
     }
@@ -962,6 +1027,7 @@
     WORK.phase4StartMs = null;
     WORK.phase4EndMs = null;
     WORK.currentBoost = 1;
+    WORK.allLockIntervalsRemaining = 0;
   }
 
   // Expose

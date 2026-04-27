@@ -15,6 +15,7 @@
 import * as Events from './events.js';
 
 const MENU_ID = 'teacher-menu';
+const PHASE_TIMER_STORAGE_KEY = 'ce:phaseTimer:on';
 
 
 // --------------------------------------------------------
@@ -36,6 +37,15 @@ function isOpen() {
   return !!(Canvas.windows && Canvas.windows[MENU_ID]);
 }
 
+function restorePhaseTimerPreference() {
+  window.__CE_BOOT = window.__CE_BOOT || {};
+  try {
+    const saved = localStorage.getItem(PHASE_TIMER_STORAGE_KEY);
+    if (saved === 'off') window.__CE_BOOT.phaseTimeModalsOff = true;
+    if (saved === 'on') window.__CE_BOOT.phaseTimeModalsOff = false;
+  } catch {}
+}
+
 function getWindowRoot() {
   const Canvas = getCanvas();
   if (Canvas && Canvas.windows && Canvas.windows[MENU_ID]) {
@@ -52,6 +62,9 @@ function getWindowRoot() {
 function buildContent() {
   const currentBoost =
     window.__CE_BOOT?.CE?.modules?.Dashboard?.getLessonBoost?.() ?? 1;
+
+  const phaseTimerOn =
+    window.__CE_BOOT?.phaseTimeModalsOff !== true;
 
   // Header + close button are provided by Canvas Host; we only render the body.
   return `
@@ -105,6 +118,13 @@ function buildContent() {
           Engagement Boost: +${currentBoost}
         </button>
         <span class="tm-note">Work Phase 4</span>
+      </div>
+
+      <div class="tm-row">
+        <button type="button" class="tm-btn" data-tm-action="timed-phase-modals" id="tm-timed-phase-modals">
+          Phase Timer: ${phaseTimerOn ? 'ON' : 'OFF'}
+        </button>
+        <span class="tm-note">Phases 3–6</span>
       </div>
 
     </div>
@@ -213,6 +233,24 @@ function cycleBoost(Ev, button) {
   updateBoostLabel(button);
 }
 
+function updateTimedPhaseModalsLabel(button) {
+  if (!button) return;
+  const phaseTimerOn = window.__CE_BOOT?.phaseTimeModalsOff !== true;
+  button.textContent = `Phase Timer: ${phaseTimerOn ? 'ON' : 'OFF'}`;
+}
+
+function toggleTimedPhaseModals(button) {
+  window.__CE_BOOT = window.__CE_BOOT || {};
+  window.__CE_BOOT.phaseTimeModalsOff = window.__CE_BOOT.phaseTimeModalsOff !== true;
+  try {
+    localStorage.setItem(
+      PHASE_TIMER_STORAGE_KEY,
+      window.__CE_BOOT.phaseTimeModalsOff === true ? 'off' : 'on'
+    );
+  } catch {}
+  updateTimedPhaseModalsLabel(button);
+}
+
 // --------------------------------------------------------
 // Wire Events
 // --------------------------------------------------------
@@ -304,6 +342,15 @@ function wireWindow() {
     updateBoostLabel(boostBtn);
     boostBtn.addEventListener('click', () => cycleBoost(Ev, boostBtn));
   }
+
+  // Timed Phase Modals – ON/OFF
+  const timedPhaseModalsBtn = q('[data-tm-action="timed-phase-modals"]');
+  if (timedPhaseModalsBtn) {
+    updateTimedPhaseModalsLabel(timedPhaseModalsBtn);
+    timedPhaseModalsBtn.addEventListener('click', () => {
+      toggleTimedPhaseModals(timedPhaseModalsBtn);
+    });
+  }
 }
 
 // --------------------------------------------------------
@@ -321,6 +368,8 @@ function markTriggerClickable(el) {
 // Attach to the "Class Economy" title strip once DOM is ready
 (function bootTeacherMenuTrigger() {
   try {
+    restorePhaseTimerPreference();
+
     const onReady = () => {
       const el =
         document.getElementById('title-strip') ||

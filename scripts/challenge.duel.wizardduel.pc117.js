@@ -450,10 +450,10 @@
     ctx.restore();
 
     addParticle(
-      s.x - s.dx * 0.2,
-      s.y - s.dy * 0.2,
-      -s.dx * 0.08 + (Math.random() - 0.5) * 0.6,
-      -s.dy * 0.08 + (Math.random() - 0.5) * 0.6,
+      s.x + (Math.random() - 0.5) * 4,
+      s.y + (Math.random() - 0.5) * 4,
+      -s.dx * 0.015 + (Math.random() - 0.5) * 0.35,
+      -s.dy * 0.015 + (Math.random() - 0.5) * 0.35,
       18,
       3,
       glow,
@@ -591,8 +591,8 @@
     let dx = owner === 1 ? +SPELL_SPEED : -SPELL_SPEED;
     let dy = 0;
 
-    if (Math.abs(wiz.vy) > 0.1) {
-      dy = (wiz.vy > 0 ? 1 : -1) * (SPELL_SPEED * 0.45);
+    if (Math.abs(wiz.wantVY) > 0.1) {
+      dy = (wiz.wantVY > 0 ? 1 : -1) * (SPELL_SPEED * 0.45);
       const m = Math.hypot(dx, dy);
       dx = dx * (SPELL_SPEED / m);
       dy = dy * (SPELL_SPEED / m);

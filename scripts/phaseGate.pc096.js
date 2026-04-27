@@ -186,6 +186,19 @@ const PhaseGate = (() => {
       return;
     }
 
+    // Teacher Menu override:
+    // When timed phase modals are OFF, behave as if the teacher clicked Cancel.
+    // Phase entry still occurs, but no countdown starts.
+    // Mark overtimeSince so the phase clock counts elapsed time instead of staying 00:00.
+    if (window.__CE_BOOT?.phaseTimeModalsOff === true) {
+      state.countdown = null;
+      state.overtimeSince = state.phaseEnteredAt || Date.now();
+      clearTick();
+      clearExitLoop();
+      publishState();
+      return;
+    }
+
     if (hasPhaseWindows()) {
       const content = `
         <div style="display:flex; flex-direction:column; gap:10px;">
