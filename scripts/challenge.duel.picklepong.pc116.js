@@ -19,10 +19,11 @@
 
   const PADDLE_MARGIN = 10;
   const BASELINE_FPS = 31;
-  const BASE_PADDLE_SPEED = 11.2 * BASELINE_FPS;
+  const BASE_PADDLE_SPEED = 13.2 * BASELINE_FPS;
   const ROUND_MS = 90000;
   const RAMP_REFERENCE_MS = 120000;
   const COUNTDOWN_MS = 3000;
+  const CELEBRATION_MS = 3000;  
   const RAMP_REBOUNDS = 12;
   const BASE_STEP_X = (6.4 * (WIDTH / 720)) * BASELINE_FPS;
   const BASE_STEP_Y = (6.4 * (HEIGHT / 420)) * BASELINE_FPS;
@@ -38,9 +39,11 @@
     onComplete: null,
     lastTickTs: 0,
 
-    phase: 'idle', // idle | countdown | live | suddenDeath | finished
+    phase: 'idle', // idle | countdown | live | suddenDeath | celebrating | finished
     countdownUntil: 0,
     endsAt: 0,
+    celebrationUntil: 0,
+    result: null,
     reboundCount: 0,
     serveStartedAt: 0,
 
@@ -354,7 +357,18 @@
       return;
     }
 
+    if (MOD.phase === 'celebrating') {
+      const flash = Math.sin(now() * 0.018) > 0;
+      overlay.classList.remove('is-hidden');
+      overlay.style.color = flash ? '#facc15' : '#ffffff';
+      overlay.style.fontSize = '72px';
+      overlay.textContent = `WINNER! ${MOD.result?.winnerName || 'Winner'}`;
+      return;
+    }
+
     overlay.classList.add('is-hidden');
+    overlay.style.color = '';
+    overlay.style.fontSize = '';
     overlay.textContent = '';
   }
 
@@ -379,6 +393,8 @@
           timerEl.textContent = '1:30';
       } else if (MOD.phase === 'suddenDeath') {
         timerEl.textContent = 'SD';
+      } else if (MOD.phase === 'celebrating') {
+        timerEl.textContent = 'WIN';
       } else {
         timerEl.textContent = '0:00';
       }
@@ -500,17 +516,26 @@
   }
 
   function finish() {
-    MOD.phase = 'finished';
-
     const winner = MOD.scoreA > MOD.scoreB ? MOD.pair.a : MOD.pair.b;
     const loser = MOD.scoreA > MOD.scoreB ? MOD.pair.b : MOD.pair.a;
 
-    MOD.onComplete({
+    MOD.phase = 'celebrating';
+    MOD.celebrationUntil = now() + CELEBRATION_MS;
+    MOD.result = {
       winnerId: winner.id,
       winnerName: winner.name,
       loserId: loser.id,
       loserName: loser.name
-    });
+    };
+  }
+
+  function completeCelebration() {
+    if (MOD.phase === 'finished') return;
+    MOD.phase = 'finished';
+
+    if (typeof MOD.onComplete === 'function' && MOD.result) {
+      MOD.onComplete(MOD.result);
+    }
   }
 
   function render() {
@@ -545,7 +570,6 @@
           MOD.phase = 'suddenDeath';
         } else {
           finish();
-          return;
         }
       }
     } else if (MOD.phase === 'suddenDeath') {
@@ -554,6 +578,10 @@
 
       if (MOD.scoreA !== MOD.scoreB) {
         finish();
+      }
+    } else if (MOD.phase === 'celebrating') {
+      if (ts >= MOD.celebrationUntil) {
+        completeCelebration();
         return;
       }
     }
@@ -693,7 +721,11 @@
     MOD.controls.b.y = 250;
     MOD.scoreA = 0;
     MOD.scoreB = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
     MOD.lastTickTs = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
     resetInputs();
     try { window.CE_INPUT?.start?.(); } catch {}
     serve(Math.random() < 0.5 ? -1 : 1);

@@ -10,24 +10,24 @@ export default {
   },
   d: {
     1: [
-      { q: '1 out of 2 shaded', a: '1/2' },
-      { q: '1 out of 3 shaded', a: '1/3' },
-      { q: '2 out of 4 shaded', a: '1/2' },
-      { q: '3 out of 4 shaded', a: '3/4' },
-      { q: '2 out of 3 shaded', a: '2/3' },
-      { q: '1 out of 4 shaded', a: '1/4' },
-      { q: '2 out of 2 shaded', a: '1' },
-      { q: '0 out of 3 shaded', a: '0' }
+      { q: '1 out of 2', a: '1/2' },
+      { q: '1 out of 3', a: '1/3' },
+      { q: '2 out of 4', a: '1/2' },
+      { q: '3 out of 4', a: '3/4' },
+      { q: '2 out of 3', a: '2/3' },
+      { q: '1 out of 4', a: '1/4' },
+      { q: '2 out of 2', a: '1' },
+      { q: '0 out of 3', a: '0' }
     ],
     2: [
-      { q: '3 out of 6 shaded', a: '1/2' },
-      { q: '2 out of 6 shaded', a: '1/3' },
-      { q: '4 out of 8 shaded', a: '1/2' },
-      { q: '6 out of 8 shaded', a: '3/4' },
-      { q: '3 out of 9 shaded', a: '1/3' },
-      { q: '5 out of 10 shaded', a: '1/2' },
-      { q: '8 out of 10 shaded', a: '4/5' },
-      { q: '1 out of 5 shaded', a: '1/5' }
+      { q: '3 out of 6', a: '1/2' },
+      { q: '2 out of 6', a: '1/3' },
+      { q: '4 out of 8', a: '1/2' },
+      { q: '6 out of 8', a: '3/4' },
+      { q: '3 out of 9', a: '1/3' },
+      { q: '5 out of 10', a: '1/2' },
+      { q: '8 out of 10', a: '4/5' },
+      { q: '1 out of 5', a: '1/5' }
     ],
     3: [
       { q: 'Which is larger: 1/2 or 1/3?', a: '1/2' },

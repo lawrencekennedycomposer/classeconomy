@@ -36,6 +36,8 @@
 
     // topbar
     topbarWrap: null,
+    classSelectEl: null,
+    classSelectPrevOrder: '',
     elIntervalTimer: null,
     elPhaseTimer: null,
     btnAll: null,
@@ -224,6 +226,8 @@
     wrap.style.alignItems = 'center';
     wrap.style.gap = '8px';
     wrap.style.marginLeft = '8px';
+    wrap.style.order = '1';
+
 
     // Interval timer
     const interval = document.createElement('span');
@@ -280,26 +284,32 @@
       if (next > 0) setAllActiveEngaged(true);
     });
 
-    wrap.appendChild(interval);
-    wrap.appendChild(boostEl);
+    btnAll.style.order = '1';
+    btnAllLock.style.order = '2';
+    boostEl.style.order = '3';
+    interval.style.order = '4';
+
     wrap.appendChild(btnAll);
     wrap.appendChild(btnAllLock);
- 
-    topbar.appendChild(wrap);
+    wrap.appendChild(boostEl);
+    wrap.appendChild(interval); 
 
+    const classSelect =
+      document.getElementById('class-select') ||
+      topbar.querySelector('#class-select') ||
+      topbar.querySelector('.topbar-select');
 
-    // Swap positions: ensure ALL is on the other side of "Class Economy"
-    // (best-effort: move whichever exists so their order flips)
-    const ceBtn = findClassEconomyBtn();
-    if (ceBtn) {
-      const ceBeforeWrap = !!(ceBtn.compareDocumentPosition(wrap) & Node.DOCUMENT_POSITION_FOLLOWING);
-      if (ceBeforeWrap) {
-        // CE is before wrap -> move CE after wrap (so ALL comes before CE)
-        try { topbar.insertBefore(ceBtn, wrap.nextSibling); } catch { /* no-op */ }
-      } else {
-        // CE is after wrap -> move CE before wrap (so CE comes before ALL)
-        try { topbar.insertBefore(ceBtn, wrap); } catch { /* no-op */ }
-      }
+    if (classSelect) {
+      WORK.classSelectEl = classSelect;
+      WORK.classSelectPrevOrder = classSelect.style.order || '';
+      classSelect.style.order = '2';
+    }
+
+    if (classSelect?.parentNode) {
+      try { classSelect.parentNode.insertBefore(wrap, classSelect); }
+      catch { topbar.appendChild(wrap); }
+    } else {
+      topbar.appendChild(wrap);
     }
 
 
@@ -320,6 +330,11 @@
       // no-op
     }
     WORK.topbarWrap = null;
+    if (WORK.classSelectEl) {
+      try { WORK.classSelectEl.style.order = WORK.classSelectPrevOrder || ''; } catch {}
+    }
+    WORK.classSelectEl = null;
+    WORK.classSelectPrevOrder = '';
     WORK.elIntervalTimer = null;
     WORK.elPhaseTimer = null;
     WORK.btnAll = null;

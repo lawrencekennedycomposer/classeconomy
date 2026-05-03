@@ -19,8 +19,9 @@
 (() => {
   const WIDTH = 1280;
   const HEIGHT = 720;
-  const ROUND_MS = 120000;
+  const ROUND_MS = 90000;
   const COUNTDOWN_MS = 3000;
+  const CELEBRATION_MS = 3000;
 
   const WIZ_W = 40;
   const WIZ_H = 96;
@@ -88,9 +89,11 @@
     pair: null,
     onComplete: null,
 
-    phase: 'idle', // idle | countdown | live | suddenDeath | finished
+    phase: 'idle', // idle | countdown | live | suddenDeath | celebrating | finished
     countdownUntil: 0,
     endsAt: 0,
+    celebrationUntil: 0,
+    result: null,
 
     canvas: null,
     ctx: null,
@@ -115,12 +118,47 @@
     scoreA: 0,
     scoreB: 0,
 
+    crystalOffsetX: 0,
+    crystalOffsetY: 0,
+    crystalScale: 1,
+
+    crystalHP: 12,
+    crystalMaxHP: 12,
+
+    crystalAlive: true,
+    crystalRespawnAt: 0,
+    crystalBreakAnimUntil: 0,
+    crystalSpawnAnimUntil: 0,
+
+
     shake: 0,
     shakeDecay: 0.92,
 
     keydownHandler: null,
     keyupHandler: null
   };
+
+  const CRYSTAL_X_OFFSETS = [-42, 0, 42];
+  const CRYSTAL_Y_SLOTS = [
+    HEIGHT * 0.24,
+    HEIGHT * 0.42,
+    HEIGHT * 0.60
+  ];
+  const CRYSTAL_SCALES = [0.72, 0.86, 1.0, 1.14];
+
+  const CRYSTAL_RESPAWN_DELAY_MS = 2500;
+  const CRYSTAL_BREAK_ANIM_MS = 420;
+  const CRYSTAL_SPAWN_ANIM_MS = 520;
+
+  function repositionCrystal() {
+    const x = CRYSTAL_X_OFFSETS[Math.floor(Math.random() * 3)];
+    const y = CRYSTAL_Y_SLOTS[Math.floor(Math.random() * 3)];
+    const scale = CRYSTAL_SCALES[Math.floor(Math.random() * CRYSTAL_SCALES.length)];
+
+    MOD.crystalOffsetX = x;
+    MOD.crystalOffsetY = y - (HEIGHT * 0.34);
+    MOD.crystalScale = scale;
+  }
 
   function now() {
     return performance.now();
@@ -178,6 +216,8 @@
   function resetState() {
     MOD.scoreA = 0;
     MOD.scoreB = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
     MOD.p1 = createWizard(80, HEIGHT / 2 - WIZ_H / 2);
     MOD.p2 = createWizard(WIDTH - 80 - WIZ_W, HEIGHT / 2 - WIZ_H / 2);
     MOD.particles = [];
@@ -187,6 +227,13 @@
     MOD.gamepadMove.aVY = 0;
     MOD.gamepadMove.bVX = 0;
     MOD.gamepadMove.bVY = 0;
+
+    MOD.crystalHP = MOD.crystalMaxHP;
+    MOD.crystalAlive = true;
+    MOD.crystalRespawnAt = 0;
+    MOD.crystalBreakAnimUntil = 0;
+    MOD.crystalSpawnAnimUntil = now() + CRYSTAL_SPAWN_ANIM_MS;
+    repositionCrystal();
   }
 
   function rr(ctx, x, y, w, h, r) {
@@ -364,12 +411,56 @@
     }
   }
 
+  function drawCrystalCracks(ctx, shard, scaleX, scaleY, hpRatio) {
+    const damage = 1 - hpRatio;
+    if (damage < 0.18) return;
+
+    const crackCount = damage > 0.75 ? 5 : damage > 0.5 ? 4 : damage > 0.32 ? 3 : 2;
+
+    ctx.save();
+    ctx.globalAlpha = 0.18 + damage * 0.52;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 1.1 + damage * 1.2;
+    ctx.lineCap = 'round';
+
+    for (let k = 0; k < crackCount; k++) {
+      const y = shard.baseY + MOD.crystalOffsetY + shard.h * (0.18 + k * 0.14);
+      const x = shard.baseX + MOD.crystalOffsetX + (k % 2 === 0 ? -5 : 4) * MOD.crystalScale;
+
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (k % 2 === 0 ? 9 : -8) * scaleX, y + 15 * scaleY);
+      ctx.lineTo(x + (k % 2 === 0 ? 3 : -2) * scaleX, y + 27 * scaleY);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
   function drawForkedCrystal(ctx, t) {
-    const pulse = (Math.sin(t * 0.003) + 1) / 2;
+    const tNow = now();
+    const breaking = !MOD.crystalAlive && tNow < MOD.crystalBreakAnimUntil;
+    if (!MOD.crystalAlive && !breaking) return;
+
+  const pulse = (Math.sin(t * 0.003) + 1) / 2;
+  const hpRatio = MOD.crystalHP / MOD.crystalMaxHP;
+    const breakProgress = breaking
+      ? clamp(1 - ((MOD.crystalBreakAnimUntil - tNow) / CRYSTAL_BREAK_ANIM_MS), 0, 1)
+      : 0;
+    const spawnProgress = MOD.crystalAlive && tNow < MOD.crystalSpawnAnimUntil
+      ? clamp(1 - ((MOD.crystalSpawnAnimUntil - tNow) / CRYSTAL_SPAWN_ANIM_MS), 0, 1)
+      : 1;
+    const animScale = breaking
+      ? 1 + breakProgress * 0.28
+      : 0.72 + spawnProgress * 0.28;
+    const animAlpha = breaking
+      ? 1 - breakProgress
+      : spawnProgress;
+
 
     for (const shard of FORKS) {
-      const scaleY = shard.h / 210;
-      const scaleX = shard.w / 26;
+      const scaleY = (shard.h / 210) * MOD.crystalScale * animScale;
+      const scaleX = (shard.w / 26) * MOD.crystalScale * animScale;
 
       ctx.save();
       const sx = (Math.random() - 0.5) * MOD.shake * 0.8;
@@ -378,24 +469,32 @@
 
       ctx.beginPath();
       shard.pts.forEach((p, i) => {
-        const X = shard.baseX + p.x * scaleX;
-        const Y = shard.baseY + p.y * scaleY;
+        const X = shard.baseX + MOD.crystalOffsetX + p.x * scaleX;
+        const Y = shard.baseY + MOD.crystalOffsetY + p.y * scaleY;
         if (i === 0) ctx.moveTo(X, Y);
         else ctx.lineTo(X, Y);
       });
       ctx.closePath();
 
       const g = ctx.createLinearGradient(shard.baseX - 10, shard.baseY, shard.baseX + 10, shard.baseY + shard.h);
-      g.addColorStop(0, COLORS.obelisk);
-      g.addColorStop(1, '#5b21b6');
+      const lightAmt = 1 - hpRatio;
+      const topColor = `rgb(${124 + Math.round(97 * lightAmt)}, ${58 + Math.round(158 * lightAmt)}, ${237 + Math.round(17 * lightAmt)})`;
+      const bottomColor = `rgb(${91 + Math.round(105 * lightAmt)}, ${33 + Math.round(148 * lightAmt)}, ${182 + Math.round(71 * lightAmt)})`;
+      g.addColorStop(0, topColor);
+      g.addColorStop(1, bottomColor);
       ctx.fillStyle = g;
+      ctx.save();
+      ctx.globalAlpha = animAlpha;
       ctx.fill();
+      ctx.restore();
 
-      ctx.globalAlpha = 0.25 + 0.15 * pulse;
+      drawCrystalCracks(ctx, shard, scaleX, scaleY, hpRatio);
+
+      ctx.globalAlpha = animAlpha * ((0.15 + 0.25 * (1 - hpRatio)) + (0.15 * pulse));
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = 1.1;
       ctx.beginPath();
-      for (let k = 0; k < 4; k++) {
+      for (let k = 0; k < 3; k++) {
         const y1 = shard.baseY + (shard.h * 0.2 + k * shard.h * 0.18);
         ctx.moveTo(shard.baseX - 6, y1);
         ctx.lineTo(shard.baseX + 6, y1 + 5);
@@ -533,11 +632,11 @@
     if (s.bounces > RICOCHET_MAX) return null;
 
     for (const shard of FORKS) {
-      const scaleY = shard.h / 210;
-      const scaleX = shard.w / 26;
+      const scaleY = (shard.h / 210) * MOD.crystalScale;
+      const scaleX = (shard.w / 26) * MOD.crystalScale;
       const poly = shard.pts.map((p) => ({
-        x: shard.baseX + p.x * scaleX,
-        y: shard.baseY + p.y * scaleY
+        x: shard.baseX + MOD.crystalOffsetX + p.x * scaleX,
+        y: shard.baseY + MOD.crystalOffsetY + p.y * scaleY
       }));
 
       const hitCrystal =
@@ -547,8 +646,31 @@
         pointInPolygon(s.x, s.y - 9, poly) ||
         pointInPolygon(s.x, s.y + 9, poly);
 
-      if (hitCrystal) {
+      if (hitCrystal && MOD.crystalAlive) {
         const hue = owner === 1 ? COLORS.glow1 : COLORS.glow2;
+
+
+        MOD.crystalHP -= 1;
+
+        if (MOD.crystalHP <= 0) {
+          MOD.crystalAlive = false;
+          MOD.crystalRespawnAt = now() + CRYSTAL_RESPAWN_DELAY_MS;
+          MOD.crystalBreakAnimUntil = now() + CRYSTAL_BREAK_ANIM_MS;
+
+          for (let k = 0; k < 28; k++) {
+            addParticle(
+              s.x,
+              s.y,
+              (Math.random() - 0.5) * 3.5,
+              (Math.random() - 0.5) * 3.5,
+              24 + Math.random() * 16,
+              4,
+              '#ffffff',
+              true
+            );
+          }
+        }
+
         for (let k = 0; k < 12; k++) {
           addParticle(
             s.x,
@@ -616,6 +738,12 @@
     MOD.p1.spell = stepSpell(MOD.p1.spell, 1);
     MOD.p2.spell = stepSpell(MOD.p2.spell, 2);
     MOD.shake *= Math.pow(MOD.shakeDecay, MOD.dt * BASELINE_FPS);
+    if (!MOD.crystalAlive && now() >= MOD.crystalRespawnAt) {
+      MOD.crystalHP = MOD.crystalMaxHP;
+      repositionCrystal();
+      MOD.crystalAlive = true;
+      MOD.crystalSpawnAnimUntil = now() + CRYSTAL_SPAWN_ANIM_MS;
+    }
   }
 
   function drawBackground(ctx) {
@@ -681,7 +809,7 @@
         ctx.fillText(String(total), HALF, HEIGHT / 2 + 36);
       }
     } else if (MOD.phase === 'countdown') {
-      ctx.fillText('2:00', HALF, 42);
+      ctx.fillText('1:30', HALF, 42);
     } else if (MOD.phase === 'suddenDeath') {
       ctx.fillText('SD', HALF, 42);
     } else {
@@ -719,6 +847,24 @@
       ctx.textBaseline = 'middle';
       ctx.fillText('SUDDEN DEATH', HALF, 98);
     }
+
+    if (MOD.phase === 'celebrating') {
+      const flash = Math.sin(now() * 0.018) > 0;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.48)';
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.fillStyle = flash ? COLORS.accent : '#ffffff';
+      ctx.font = '900 72px system-ui, sans-serif';
+      ctx.fillText('WINNER!', HALF, HEIGHT / 2 - 70);
+
+      ctx.fillStyle = flash ? '#ffffff' : COLORS.accent;
+      ctx.font = '900 96px system-ui, sans-serif';
+      ctx.fillText(MOD.result?.winnerName || 'Winner', HALF, HEIGHT / 2 + 28);
+    }
   }
 
   function drawFrame(t) {
@@ -741,15 +887,42 @@
   }
 
   function finishWithWinner(winner, loser) {
+    MOD.phase = 'celebrating';
+    MOD.celebrationUntil = now() + CELEBRATION_MS;
+    MOD.result = {
+      winnerId: String(winner.id),
+      winnerName: String(winner.name || winner.id),
+      loserId: String(loser.id),
+      loserName: String(loser.name || loser.id)
+    };
+
+    MOD.shake = Math.min(8, MOD.shake + 5);
+
+    const cx = HALF;
+    const cy = HEIGHT / 2;
+
+    for (let k = 0; k < 54; k++) {
+      const ang = (Math.PI * 2) * (k / 54);
+      const sp = 2.2 + Math.random() * 4.2;
+      addParticle(
+        cx,
+        cy,
+        Math.cos(ang) * sp,
+        Math.sin(ang) * sp,
+        32 + Math.random() * 24,
+        4,
+        k % 2 === 0 ? COLORS.glow1 : COLORS.glow2,
+        true
+      );
+    }
+  }
+
+  function completeCelebration() {
+    if (MOD.phase === 'finished') return;
     MOD.phase = 'finished';
 
-    if (typeof MOD.onComplete === 'function') {
-      MOD.onComplete({
-        winnerId: String(winner.id),
-        winnerName: String(winner.name || winner.id),
-        loserId: String(loser.id),
-        loserName: String(loser.name || loser.id)
-      });
+    if (typeof MOD.onComplete === 'function' && MOD.result) {
+      MOD.onComplete(MOD.result);
     }
   }
 
@@ -790,6 +963,10 @@
       updateGame();
       if (MOD.scoreA !== beforeA || MOD.scoreB !== beforeB) {
         finishRound();
+      }
+    } else if (MOD.phase === 'celebrating') {
+      if (ts >= MOD.celebrationUntil) {
+        completeCelebration();
       }
     }
 
@@ -859,6 +1036,8 @@
     MOD.gamepadPrev.bConfirm = false;
     MOD.lastTickTs = 0;
     MOD.dt = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
     bindInputs();
     try { window.CE_INPUT?.start?.(); } catch {}
 

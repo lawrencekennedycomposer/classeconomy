@@ -26,6 +26,8 @@
     pendingResult: null, // { winnerId, winnerName, loserId, loserName, registered, activity }
     activeGame: null,
     tickId: null,
+    padCueAUntil: 0,
+    padCueBUntil: 0,
   };
 
   function getDashboard() {
@@ -95,6 +97,43 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function getInput() {
+    return window.CE_INPUT || null;
+  }
+
+  function getPlayerStateSafe(side) {
+    const input = getInput();
+    if (!input?.getPlayerState) return {};
+    try { return input.getPlayerState(side) || {}; } catch { return {}; }
+  }
+
+  function padHasAnyPress(state) {
+    return !!(
+      state?.confirm ||
+      state?.left ||
+      state?.right ||
+      state?.up ||
+      state?.down ||
+      state?.lane1 ||
+      state?.lane2 ||
+      state?.lane3 ||
+      state?.lane4
+    );
+  }
+
+  function updateControllerCue() {
+    if (!MOD.root) return;
+
+    try { getInput()?.start?.(); } catch {}
+
+    const t = performance.now();
+    if (padHasAnyPress(getPlayerStateSafe('a'))) MOD.padCueAUntil = t + 750;
+    if (padHasAnyPress(getPlayerStateSafe('b'))) MOD.padCueBUntil = t + 750;
+
+    qs('[data-ch114-pad="a"]', MOD.root)?.classList.toggle('is-active', t < MOD.padCueAUntil);
+    qs('[data-ch114-pad="b"]', MOD.root)?.classList.toggle('is-active', t < MOD.padCueBUntil);
   }
 
   function ensureStyles() {
@@ -172,6 +211,41 @@
         font-size:18px;
         line-height:1.3;
         font-weight:800;
+      }
+
+      .ce-ch114-padcheck{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:10px;
+      }
+
+      .ce-ch114-pad{
+        padding:12px;
+        border-radius:12px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.08);
+        transition:background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      .ce-ch114-pad.is-active{
+        background:rgba(245,158,11,0.20);
+        border-color:rgba(245,158,11,0.70);
+        box-shadow:0 0 0 4px rgba(245,158,11,0.14);
+      }
+
+      .ce-ch114-padLabel{
+        font-size:11px;
+        font-weight:900;
+        letter-spacing:0.06em;
+        text-transform:uppercase;
+        opacity:0.72;
+        margin-bottom:5px;
+      }
+
+      .ce-ch114-padName{
+        font-size:18px;
+        font-weight:950;
+        line-height:1.2;
       }
 
       .ce-ch114-actions{
@@ -436,6 +510,17 @@
             ${escapeHtml(activity)}
           </div>
 
+          <div class="ce-ch114-padcheck">
+            <div class="ce-ch114-pad" data-ch114-pad="a">
+              <div class="ce-ch114-padLabel">Pad A controls</div>
+              <div class="ce-ch114-padName">${escapeHtml(pair?.a?.name || pair?.a?.id || 'Player A')}</div>
+            </div>
+            <div class="ce-ch114-pad" data-ch114-pad="b">
+              <div class="ce-ch114-padLabel">Pad B controls</div>
+              <div class="ce-ch114-padName">${escapeHtml(pair?.b?.name || pair?.b?.id || 'Player B')}</div>
+            </div>
+          </div>
+
           <button type="button" class="ce-ch114-btn ce-ch114-btn--primary" data-ch114-start>Start Duel</button>
 
           <div class="ce-ch114-status">
@@ -498,6 +583,7 @@
       qs('[data-ch114-start]', MOD.root)?.addEventListener('click', () => {
         startActivity(pair, activity);
       });
+      updateControllerCue();
       return;
     }
 
@@ -548,6 +634,8 @@
     stopTick();
 
     MOD.activeGame = null;
+    MOD.padCueAUntil = 0;
+    MOD.padCueBUntil = 0;
 
     try { MOD.root?.remove?.(); } catch {}
     MOD.root = null;

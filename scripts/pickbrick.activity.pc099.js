@@ -1173,32 +1173,21 @@
       setTimeout(() => { try { el.classList.remove('crush'); } catch {} }, 480);
     }
 
-    setStatus(`Brick ${num} opened → ${b.value}. Awarding in 2s...`);
+    setStatus(`Brick ${num} opened → ${b.value}.`);
     MOD.turnState = 'resolved';
 
-    // Delay award 2s
     const studentId = MOD.current.id;
     const points = b.value;
 
-    if (MOD.pendingAward?.t) {
-      try { clearTimeout(MOD.pendingAward.t); } catch {}
-    }
+    applyAward(studentId, points);
 
-    MOD.pendingAward = {
-      studentId,
-      points,
-      t: setTimeout(() => {
-        MOD.pendingAward = null;
-        applyAward(studentId, points);
-        setStatus(`Awarded ${points} to ${MOD.current?.name || 'student'}. Select next student.`);
-        MOD.current = null;
-        setStudentName('—');
-        MOD.turnState = 'idle';
-        syncUI();
-      }, 2000)
-    };
-
+    setStatus(`Awarded ${points} to ${MOD.current?.name || 'student'}. Select next student.`);
+    MOD.current = null;
+    setStudentName('—');
+    MOD.turnState = 'idle';
+    MOD.pendingAward = null;
     syncUI();
+
   }
 
   // -----------------------------

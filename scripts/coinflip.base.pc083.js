@@ -95,6 +95,45 @@
     return ids;
   }
 
+  function syncActiveStudentsDuringCollect() {
+    if (status !== 'collect') return;
+
+    const activeIds = new Set(getActiveStudentIdsFromLeaderboard());
+    let changed = false;
+
+    // Remove students who have left / been marked inactive.
+    for (const sid of Array.from(survivors)) {
+      if (!activeIds.has(String(sid))) {
+        survivors.delete(String(sid));
+        clearPick(String(sid));
+        changed = true;
+      }
+    }
+
+    // Remove inactive students from eliminated count too.
+    for (const sid of Array.from(eliminated)) {
+      if (!activeIds.has(String(sid))) {
+        eliminated.delete(String(sid));
+        clearPick(String(sid));
+        changed = true;
+      }
+    }
+
+    // Add late arrivals as live survivors.
+    for (const sid of activeIds) {
+      if (!survivors.has(String(sid)) && !eliminated.has(String(sid))) {
+        survivors.add(String(sid));
+        clearPick(String(sid));
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+
+    syncOverlayEligibility();
+    updateStatsUI();
+  }
+
   function getPick(studentId) {
     const api = window.__CE_LB_COINFLIP_HT;
     try {
@@ -545,6 +584,7 @@
 
         // Only gate-enable during collect stage
         if (status === 'collect') {
+          syncActiveStudentsDuringCollect();
           const ready = allSurvivorsPicked() && hasBothSidesChosen();
           setFlipEnabled(ready);
           setAutoEnabled(survivors.size > 0);

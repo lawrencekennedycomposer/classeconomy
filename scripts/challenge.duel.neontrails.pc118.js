@@ -23,6 +23,7 @@
   const MATCH_MS = 120000;
   const COUNTDOWN_MS = 2200;
   const ROUND_RESET_MS = 1600;
+  const CELEBRATION_MS = 3000;
 
   const BIKE_RADIUS = 8;
   const TRAIL_WIDTH = 8;  
@@ -58,9 +59,11 @@
     pair: null,
     onComplete: null,
 
-    phase: 'idle', // idle | countdown | live | roundOver | finished
+    phase: 'idle', // idle | countdown | live | roundOver | celebrating | finished
     matchEndsAt: 0,
     phaseEndsAt: 0,
+    celebrationUntil: 0,
+    result: null,
     roundStartedAt: 0,
     roundNumber: 0,
 
@@ -276,6 +279,8 @@
   function startMatch() {
     MOD.roundWinsA = 0;
     MOD.roundWinsB = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
     MOD.roundNumber = 1;
     MOD.matchEndsAt = now() + MATCH_MS;
     resetRoundState();
@@ -401,17 +406,26 @@
   }
 
   function finishMatch(winnerSide) {
-    MOD.phase = 'finished';
-
     const winner = winnerSide === 'a' ? MOD.pair.a : MOD.pair.b;
     const loser = winnerSide === 'a' ? MOD.pair.b : MOD.pair.a;
 
-    MOD.onComplete?.({
+    MOD.phase = 'celebrating';
+    MOD.celebrationUntil = now() + CELEBRATION_MS;
+    MOD.result = {
       winnerId: String(winner.id),
       winnerName: String(winner.name || winner.id),
       loserId: String(loser.id),
       loserName: String(loser.name || loser.id)
-    });
+    };
+  }
+
+  function completeCelebration() {
+    if (MOD.phase === 'finished') return;
+    MOD.phase = 'finished';
+
+    if (typeof MOD.onComplete === 'function' && MOD.result) {
+      MOD.onComplete(MOD.result);
+    }
   }
 
   function decideByRoundsOrPosition() {
@@ -566,6 +580,24 @@
       ctx.textBaseline = 'middle';
       ctx.fillText('NEXT ROUND', WIDTH / 2, HEIGHT / 2);
     }
+
+    if (MOD.phase === 'celebrating') {
+      const flash = Math.sin(now() * 0.018) > 0;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.52)';
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.fillStyle = flash ? COLORS.accent : '#ffffff';
+      ctx.font = '900 72px system-ui, sans-serif';
+      ctx.fillText('WINNER!', WIDTH / 2, HEIGHT / 2 - 70);
+
+      ctx.fillStyle = flash ? '#ffffff' : COLORS.accent;
+      ctx.font = '900 96px system-ui, sans-serif';
+      ctx.fillText(MOD.result?.winnerName || 'Winner', WIDTH / 2, HEIGHT / 2 + 28);
+    }
   }
 
   function drawFrame() {
@@ -607,9 +639,8 @@
     
     applyGamepadInput();
 
-    if (ts >= MOD.matchEndsAt && MOD.phase !== 'finished') {
+    if (ts >= MOD.matchEndsAt && MOD.phase !== 'finished' && MOD.phase !== 'celebrating') {
       decideByRoundsOrPosition();
-      return;
     }
 
     if (MOD.phase === 'countdown') {
@@ -622,6 +653,11 @@
     } else if (MOD.phase === 'roundOver') {
       if (ts >= MOD.phaseEndsAt) {
         startNextRound();
+      }
+    } else if (MOD.phase === 'celebrating') {
+      if (ts >= MOD.celebrationUntil) {
+        completeCelebration();
+        return;
       }
     }
 
@@ -784,6 +820,8 @@
     MOD.playerB = null;
     MOD.lastTickTs = 0;
     MOD.dt = 0;
+    MOD.result = null;
+    MOD.celebrationUntil = 0;
 
     try { MOD.root?.remove(); } catch {}
     MOD.root = null;

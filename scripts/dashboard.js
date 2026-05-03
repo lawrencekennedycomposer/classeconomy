@@ -590,9 +590,128 @@ async function _saveCurrentClassJSONViaPicker() {
   return true;
 }
 
+function _mountTopbarExportJSONButton() {
+  const topbar = document.getElementById('topbar');
+  const sel = document.getElementById('class-select');
+  if (!topbar || !sel) return false;
+  if (document.getElementById('topbar-export-json-btn')) return true;
+
+  const btn = document.createElement('button');
+  btn.id = 'topbar-export-json-btn';
+  btn.type = 'button';
+  btn.className = 'topbar-btn';
+  btn.textContent = 'Export Data';
+  btn.title = 'Export current class JSON backup';
+
+  // Keep it locked beside class selector
+  btn.style.order = sel.style.order || '2';
+
+  // Light blue tint
+  btn.style.background = 'rgba(80,140,255,0.25)';
+  btn.style.border = '1px solid rgba(80,140,255,0.45)';
+  btn.style.color = '#fff';
+  btn.style.fontWeight = '900';
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const ok = await _saveCurrentClassJSONViaPicker();
+      if (ok) {
+        try { window.__CE_UNSAVED?.markSaved?.(); } catch {}
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  sel.parentNode.insertBefore(btn, sel);
+  return true;
+}
+
+
+function _mountTopbarPhaseTimerButton() {
+  const topbar = document.getElementById('topbar');
+  const sel = document.getElementById('class-select');
+  if (!topbar || !sel) return false;
+  if (document.getElementById('topbar-phase-timer-btn')) return true;
+
+  const btn = document.createElement('button');
+  btn.id = 'topbar-phase-timer-btn';
+  btn.type = 'button';
+  btn.className = 'topbar-btn';
+  btn.textContent = 'Phase Timer';
+  btn.title = 'Set a timer for the current phase';
+
+  btn.style.background = 'rgba(255,200,0,0.25)';
+  btn.style.border = '1px solid rgba(255,200,0,0.45)';
+  btn.style.color = '#fff';
+  btn.style.fontWeight = '900';
+
+  btn.addEventListener('click', () => {
+    const Gate =
+      window.__CE_BOOT?.modules?.PhaseGate ||
+      window.PhaseGate ||
+      null;
+
+    Gate?.openPhaseTimerTool?.();
+  });
+
+  const exportBtn = document.getElementById('topbar-export-json-btn');
+  sel.parentNode.insertBefore(btn, exportBtn || sel);
+  return true;
+}
+
+function _confirmClassSwitchSaveChoice() {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.style.position = 'fixed';
+    backdrop.style.inset = '0';
+    backdrop.style.background = 'rgba(0,0,0,0.46)';
+    backdrop.style.display = 'flex';
+    backdrop.style.alignItems = 'center';
+    backdrop.style.justifyContent = 'center';
+    backdrop.style.zIndex = '9999';
+
+    const modal = document.createElement('div');
+    modal.style.width = 'min(420px, calc(100vw - 48px))';
+    modal.style.background = '#11151a';
+    modal.style.color = '#e8eef2';
+    modal.style.border = '1px solid rgba(255,255,255,0.12)';
+    modal.style.borderRadius = '14px';
+    modal.style.boxShadow = '0 24px 60px rgba(0,0,0,0.35)';
+    modal.style.padding = '14px';
+
+    modal.innerHTML = `
+      <div style="font-size:17px;font-weight:900;margin-bottom:8px;">
+        Save current class before switching?
+      </div>
+      <div style="font-size:13px;opacity:0.82;margin-bottom:14px;">
+        Choose Save to export a JSON backup, or Don’t Save to switch classes without exporting.
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" data-act="no" style="border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.08);color:#fff;padding:8px 10px;border-radius:10px;font-weight:800;cursor:pointer;">Don’t Save</button>
+        <button type="button" data-act="yes" style="border:1px solid rgba(80,140,255,0.42);background:rgba(80,140,255,0.32);color:#fff;padding:8px 10px;border-radius:10px;font-weight:900;cursor:pointer;">Save</button>
+      </div>
+    `;
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    modal.addEventListener('click', (e) => {
+      const act = e.target?.getAttribute?.('data-act');
+      if (!act) return;
+      backdrop.remove();
+      resolve(act);
+    });
+  });
+}
+
 function _initClassSelectReloadSwitch() {
   const sel = document.getElementById('class-select');
   if (!sel) return false;
+
+  _mountTopbarExportJSONButton();
+  _mountTopbarPhaseTimerButton();
 
   const sess = Storage.getSession() || { userId: null, classId: null };
   const userId = String(sess.userId || '').trim() || 'u1';
@@ -627,12 +746,29 @@ function _initClassSelectReloadSwitch() {
   optDel.textContent = 'Delete current class…';
   sel.appendChild(optDel);
 
+  const optImport = document.createElement('option');
+  optImport.value = '__import__';
+  optImport.textContent = '+ Import class…';
+  sel.appendChild(optImport);
+
   // Set current selection if available
   if (activeId) sel.value = activeId;
 
   sel.addEventListener('change', async () => {
     let targetId = String(sel.value || '').trim();
     if (!targetId) return;
+
+    if (targetId === '__import__') {
+      try {
+        emit('teacher:upload', {
+          ts: Date.now(),
+          source: 'class-dropdown'
+        });
+      } catch {}
+
+      sel.value = activeId || (classes[0]?.id || '');
+      return;
+    }
 
     if (targetId === '__new__') {
       const name = prompt('New class name:');
@@ -699,15 +835,23 @@ function _initClassSelectReloadSwitch() {
 
     // ---- FORCE SAVE + EXPORT CURRENT CLASS BEFORE SWITCH ----
     try { persistScores(); } catch {}
-    try {
-      await _saveCurrentClassJSONViaPicker();
-    } catch {
-      sel.value = activeId || (classes[0]?.id || '');
-      return;
+    const isDirty = !!window.__CE_UNSAVED?.isDirty?.();
+    const saveChoice = isDirty ? await _confirmClassSwitchSaveChoice() : 'no';
+
+    if (saveChoice === 'yes') {
+      try {
+        await _saveCurrentClassJSONViaPicker();
+        window.__CE_UNSAVED?.markSaved?.();
+      } catch {
+        sel.value = activeId || (classes[0]?.id || '');
+        return;
+      }
     }
+
     try { Storage.remove(Storage.KEYS.HISTORY_V1); } catch {}
 
     // ---- SWITCH VIA SESSION + RELOAD (welcome reset) ----
+    window.__CE_UNSAVED?.allowNextUnload?.();
     try { Storage.setSession(userId, targetId); } catch {}
     location.reload();
   });

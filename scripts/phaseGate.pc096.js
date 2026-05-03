@@ -113,6 +113,9 @@ const PhaseGate = (() => {
     clearTick();
     clearExitLoop();
 
+    window.__CE_BOOT = window.__CE_BOOT || {};
+    window.__CE_BOOT.phaseTimeModalsOff = false;
+
     state.overtimeSince = null;
     state.countdown = {
       phase,
@@ -126,6 +129,8 @@ const PhaseGate = (() => {
       if (remaining <= 0) {
         clearTick();
         state.countdown = null;
+        window.__CE_BOOT = window.__CE_BOOT || {};
+        window.__CE_BOOT.phaseTimeModalsOff = true;
         requestExitModal({ reason: 'timeout' });
       }
     }, 250);
@@ -179,6 +184,7 @@ const PhaseGate = (() => {
     const p = Number(toPhase);
     const defaultMin = 5;
     const doCommit = opts.commit !== false;
+    const forceTimer = opts.forceTimer === true;
 
     // Spec invariant: phases 1,2,7 never require time entry
     if (!isTimedPhase(p)) {
@@ -190,7 +196,7 @@ const PhaseGate = (() => {
     // When timed phase modals are OFF, behave as if the teacher clicked Cancel.
     // Phase entry still occurs, but no countdown starts.
     // Mark overtimeSince so the phase clock counts elapsed time instead of staying 00:00.
-    if (window.__CE_BOOT?.phaseTimeModalsOff === true) {
+    if (window.__CE_BOOT?.phaseTimeModalsOff === true && !forceTimer) {
       state.countdown = null;
       state.overtimeSince = state.phaseEnteredAt || Date.now();
       clearTick();
@@ -350,9 +356,35 @@ function openExtendModal(currentPhase) {
     function requestExitModal({ reason, target } = {}) {
     if (!isTimedPhase(state.currentPhase)) return;
     if (state.exitModalOpen) return;
+
+    const current = Number(state.currentPhase);
+    const phaseTimerOff = window.__CE_BOOT?.phaseTimeModalsOff === true;
+    const skipManualLeaveConfirm =
+      phaseTimerOff &&
+      reason === 'teacherAttemptLeave' &&
+      (current === 3 || current === 4);
+
+    if (skipManualLeaveConfirm) {
+      const desired = Number(target);
+      if (!Number.isFinite(desired)) return;
+
+      clearTick();
+      clearExitLoop();
+      state.countdown = null;
+      state.overtimeSince = null;
+      state.exitModalOpen = false;
+
+      commitPhaseChange(desired);
+
+      if (isTimedPhase(desired)) {
+        openEntryModal(desired, { commit: false });
+      }
+
+      return;
+    }
+
     state.exitModalOpen = true;
 
-    const current = state.currentPhase;
     const e = enabledPhases();
     const next = nextEnabledPhase(current);
     const desired =
@@ -449,6 +481,8 @@ function openExtendModal(currentPhase) {
     if (prev !== next) {
       state.countdown = null;
       state.overtimeSince = null;
+      window.__CE_BOOT = window.__CE_BOOT || {};
+      window.__CE_BOOT.phaseTimeModalsOff = true;
       clearTick();
       closeExitModal();
     }
@@ -522,11 +556,28 @@ function openExtendModal(currentPhase) {
     publishState();
   }
 
+  function openPhaseTimerTool() {
+    const p = Number(state.currentPhase);
+    if (!isTimedPhase(p)) {
+      window.alert?.('Phase Timer is only available for phases 3–6.');
+      return false;
+    }
+
+    openEntryModal(p, {
+      commit: false,
+      forceTimer: true
+    });
+
+    return true;
+  }
+
   function init(opts = {}) {
     if (initialised) return;
     initialised = true;
 
     state.inited = true;
+    window.__CE_BOOT = window.__CE_BOOT || {};
+    window.__CE_BOOT.phaseTimeModalsOff = true;
 
     CEEvents = opts.Events || null;
     phaseWindows = opts.phaseWindows || null;
@@ -550,7 +601,10 @@ function openExtendModal(currentPhase) {
     log('initialised');
   }
 
-  return { init };
+  return {
+    init,
+    openPhaseTimerTool
+  };
 
 })();
 

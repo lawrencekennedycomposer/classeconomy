@@ -41,6 +41,10 @@ function restorePhaseTimerPreference() {
   window.__CE_BOOT = window.__CE_BOOT || {};
   try {
     const saved = localStorage.getItem(PHASE_TIMER_STORAGE_KEY);
+    if (saved == null) {
+      window.__CE_BOOT.phaseTimeModalsOff = true;
+      return;
+    }
     if (saved === 'off') window.__CE_BOOT.phaseTimeModalsOff = true;
     if (saved === 'on') window.__CE_BOOT.phaseTimeModalsOff = false;
   } catch {}
@@ -86,15 +90,6 @@ function buildContent() {
         <button type="button" class="tm-btn tm-btn-primary" data-tm-action="bank">
           Bank unbanked tokens
         </button>
-        <button type="button" class="tm-btn" data-tm-action="csv">
-          Download CSV
-        </button>
-        <button type="button" class="tm-btn" data-tm-action="json">
-          Download JSON
-        </button>
-        <button type="button" class="tm-btn" data-tm-action="upload">
-          Upload CSV/JSON
-        </button>
       </div>
 
       <div class="tm-row">
@@ -118,13 +113,6 @@ function buildContent() {
           Engagement Boost: +${currentBoost}
         </button>
         <span class="tm-note">Work Phase 4</span>
-      </div>
-
-      <div class="tm-row">
-        <button type="button" class="tm-btn" data-tm-action="timed-phase-modals" id="tm-timed-phase-modals">
-          Phase Timer: ${phaseTimerOn ? 'ON' : 'OFF'}
-        </button>
-        <span class="tm-note">Phases 3–6</span>
       </div>
 
     </div>
@@ -328,6 +316,8 @@ function wireWindow() {
 
   // PC#100 – Logout / Switch user (preboot wall will re-appear)
   q('[data-tm-action="logout"]')?.addEventListener('click', () => {
+    try { window.__CE_UNSAVED?.allowNextUnload?.(); } catch {}
+    
     if (window.__CE_ACCOUNTS?.logout) {
       window.__CE_ACCOUNTS.logout();
       return;
@@ -343,14 +333,6 @@ function wireWindow() {
     boostBtn.addEventListener('click', () => cycleBoost(Ev, boostBtn));
   }
 
-  // Timed Phase Modals – ON/OFF
-  const timedPhaseModalsBtn = q('[data-tm-action="timed-phase-modals"]');
-  if (timedPhaseModalsBtn) {
-    updateTimedPhaseModalsLabel(timedPhaseModalsBtn);
-    timedPhaseModalsBtn.addEventListener('click', () => {
-      toggleTimedPhaseModals(timedPhaseModalsBtn);
-    });
-  }
 }
 
 // --------------------------------------------------------

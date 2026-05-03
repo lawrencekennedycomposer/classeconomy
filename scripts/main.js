@@ -88,6 +88,54 @@ const CE = Object.freeze({
 })();
 
 /* =========================================================
+   PC#0XX – Native browser close/refresh unsaved warning
+   Notes:
+     - Uses Chrome/Edge built-in beforeunload modal
+     - Browser controls modal text; custom text is ignored
+     - Warns only when current export differs from saved baseline
+========================================================= */
+try {
+  (function attachBeforeUnloadUnsavedGuard() {
+    let savedBaseline = '';
+    let allowUnload = false;
+
+    function getCurrentSaveState() {
+      try {
+        if (typeof Storage.exportAdvisoryJSON === 'function') {
+          return String(Storage.exportAdvisoryJSON() || '');
+        }
+      } catch {}
+      return '';
+    }
+
+    function markSaved() {
+      savedBaseline = getCurrentSaveState();
+      return true;
+    }
+
+    // Capture baseline after boot/hydration has had a moment to settle.
+    setTimeout(markSaved, 1200);
+
+    window.__CE_UNSAVED = Object.assign({}, window.__CE_UNSAVED, {
+      markSaved,
+      isDirty: () => getCurrentSaveState() !== savedBaseline
+      ,
+      allowNextUnload: () => { allowUnload = true; }
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+    if (allowUnload) return;
+
+    const dirty = getCurrentSaveState() !== savedBaseline;
+    if (!dirty) return;
+
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  })();
+} catch {}
+
+/* =========================================================
    PC#003 – Roster mount (DISABLED – superseded by PC#051)
    ========================================================= */
 try {
